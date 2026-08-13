@@ -732,27 +732,37 @@ render() {
             fi
 
             local _icon _ic; _set_icon_color "$pstatus"
-            local tree="├"; [[ "$is_last" == "1" ]] && tree="└"
+            # Window rows are already indented under their session row, so a
+            # tree connector here adds nothing -- only their agent children
+            # draw one. Kept as a single space rather than removed outright so
+            # every width calculation below, which assumes one column at this
+            # position, keeps working unchanged.
+            local tree=" "
+            # The current window is marked by bracketing its index in green
+            # rather than by a trailing label. The gutter is a fixed WIDX_W+2
+            # columns either way -- brackets on the current row, spaces in
+            # their place on every other -- so the names after it stay flush.
+            # A window row carries its index in the selection target ("0:w8");
+            # an agent row carries a pane id there, so only the former gets a
+            # number. wnum holds colour escapes, so its display width is
+            # tracked in wnum_vlen rather than measured from the string.
             local active_tag=""
-            local tag_vlen=0
-            (( is_cur )) && { active_tag=" ${ACC_GRN}[ACTIVE]${RST}"; tag_vlen=9; }
+            local wnum="" wnum_vlen=0
+            if [[ "$sel_type" == "P" && "$sel_name" =~ :w([0-9]+)$ ]]; then
+                if (( is_cur )); then
+                    printf -v wnum "${ACC_GRN}[%${WIDX_W}s]${RST} " "${BASH_REMATCH[1]}"
+                else
+                    printf -v wnum "${DIM} %${WIDX_W}s ${RST} " "${BASH_REMATCH[1]}"
+                fi
+                wnum_vlen=$(( WIDX_W + 3 ))
+            fi
 
-            # A window row carries its tmux window index in the selection
-            # target ("0:w8"); an agent row carries a pane id there instead, so
-            # only the former gets a number. Right-aligned to WIDX_W so the
-            # names after it stay flush. No colour codes, so ${#wnum} stays a
-            # true display width for the padding maths below.
-            local wnum=""
-            [[ "$sel_type" == "P" && "$sel_name" =~ :w([0-9]+)$ ]] &&
-                printf -v wnum "%${WIDX_W}s " "${BASH_REMATCH[1]}"
-
-            local max_n=$((LW - 8 - tag_vlen - ${#wnum}))
+            local max_n=$((LW - 8 - wnum_vlen))
             (( max_n < 4 )) && max_n=4
             local dagent="$agent"
             (( ${#dagent} > max_n )) && dagent="${dagent:0:$((max_n-1))}…"
-            dagent="${wnum}${dagent}"
 
-            local vlen=$(( ${#dagent} + tag_vlen ))
+            local vlen=$(( ${#dagent} + wnum_vlen ))
             local pad
             local _spinner_bg="none"
             (( is_sel )) && _spinner_bg="sel"
@@ -762,19 +772,19 @@ render() {
                 pad=$((LW - vlen - 8))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${DIM}${tree}${RST}${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
+                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${DIM}${tree}${RST}${SEL_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 8))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${tree}${RST}${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
+                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${tree}${RST}${CUR_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - 8))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${DIM}${tree} ${dagent}${RST}"
+                buf+="    ${DIM}${tree} ${RST}${wnum}${DIM}${dagent}${RST}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
 
@@ -789,40 +799,47 @@ render() {
             [[ "$sess" == "$cur_session" && "$pane_id" == "$cur_pane" ]] && is_cur=1
 
             local _icon _ic; _set_icon_color "$pstatus"
-            local tree="├"; [[ "$is_last" == "1" ]] && tree="└"
-            local vert="│"; [[ "$parent_is_last" == "1" ]] && vert=" "
+            # Agents carry no connector -- the indent alone nests them under
+            # their window. The active pane is marked with [*], filling the
+            # same three columns an unmarked row leaves blank, so marked and
+            # unmarked rows stay aligned. q_gap clears the window-number
+            # gutter so it tracks WIDX_W; q_pre is the resulting visible prefix
+            # width that the padding, truncation and spinner-column arithmetic
+            # below all derive from.
+            local qmark="   "
+            (( is_cur )) && qmark="${ACC_GRN}[*]${RST}"
+            local q_gap; printf -v q_gap '%*s' "$((WIDX_W + 3))" ''
+            local q_pre=$(( 11 + WIDX_W ))
             local active_tag=""
-            local tag_vlen=0
-            (( is_cur )) && { active_tag=" ${ACC_GRN}[ACTIVE]${RST}"; tag_vlen=9; }
 
-            local max_n=$((LW - 10 - tag_vlen))
+            local max_n=$((LW - q_pre - 2))
             (( max_n < 4 )) && max_n=4
             local dagent="$agent"
             (( ${#dagent} > max_n )) && dagent="${dagent:0:$((max_n-1))}…"
 
-            local vlen=$(( ${#dagent} + tag_vlen ))
+            local vlen=$(( ${#dagent} ))
             local pad
             local _spinner_bg="none"
             (( is_sel )) && _spinner_bg="sel"
             (( ! is_sel && is_cur )) && _spinner_bg="cur"
 
             if (( is_sel )); then
-                pad=$((LW - vlen - 10))
+                pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
-                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((8 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${DIM}${vert} ${tree}${RST}${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
+                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
+                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${q_gap}${qmark}${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
-                pad=$((LW - vlen - 10))
+                pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
-                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((8 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${vert} ${tree}${RST}${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
+                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
+                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${q_gap}${qmark}${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
-                pad=$((LW - vlen - 10))
+                pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
-                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((8 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${DIM}${vert} ${tree} ${dagent}${RST}"
+                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
+                buf+="    ${q_gap}${qmark} ${DIM}${dagent}${RST}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
         fi
