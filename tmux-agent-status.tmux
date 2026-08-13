@@ -100,31 +100,51 @@ if ! echo "$current_status_right" | grep -q "status-line.sh"; then
     tmux set-option -ag status-right " #($CURRENT_DIR/scripts/status-line.sh)"
 fi
 
+# Append a hook only when an identical entry is not already registered.
+#
+# tmux has no idempotent set-hook: `-ga` appends unconditionally, so every
+# config reload stacks another copy. Reloading often leaves dozens of duplicates
+# (observed: 84 entries on session-created after ~28 reloads, which fired
+# daemon-monitor.sh 28 times per new session). Plain `-g` is not an option --
+# it replaces the whole array and would silently delete hooks the user or other
+# plugins registered on the same event.
+#
+# Quotes are stripped from both sides before comparing because tmux re-renders
+# hook commands with its own quoting, which will not match ours byte for byte.
+# Same idea as the status-right guard above.
+add_hook_once() {
+    local hook="$1" cmd="$2" key
+    key=$(printf '%s' "$cmd" | tr -d "\"'")
+    if ! tmux show-hooks -g "$hook" 2>/dev/null | tr -d "\"'" | grep -Fq -- "$key"; then
+        tmux set-hook -ga "$hook" "$cmd"
+    fi
+}
+
 # Set up daemon monitor to ensure smart-monitor is always running
 # Start daemon monitor on session created
-tmux set-hook -ga session-created "run-shell '$CURRENT_DIR/scripts/daemon-monitor.sh'"
+add_hook_once session-created "run-shell '$CURRENT_DIR/scripts/daemon-monitor.sh'"
 
 # Sidebars are event-driven: wake them when tmux client focus changes so they
 # can refresh ACTIVE markers without polling in the pane process.
-tmux set-hook -ga client-attached "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-tmux set-hook -ga client-session-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-tmux set-hook -ga after-select-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-tmux set-hook -ga after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-tmux set-hook -ga after-switch-client "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-tmux set-hook -ga session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-tmux set-hook -ga window-pane-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once client-attached "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once client-session-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once after-select-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once after-switch-client "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+add_hook_once window-pane-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 
 # Nudge the collector when tmux structure or names change so cache rebuilds stay
 # event-driven instead of waiting for a fallback poll.
-tmux set-hook -ga session-created "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-tmux set-hook -ga pane-exited "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-tmux set-hook -ga window-layout-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-tmux set-hook -ga after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-tmux set-hook -ga after-kill-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-tmux set-hook -ga after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once session-created "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once pane-exited "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once window-layout-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-kill-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 
 # Auto-create sidebar in new sessions (small delay so the session is ready)
-tmux set-hook -ga session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh'"
+add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh'"
 
 # Start sidebar data collector daemon (one per tmux server)
 "$CURRENT_DIR/scripts/sidebar-collector.sh" &
