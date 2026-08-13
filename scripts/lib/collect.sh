@@ -500,14 +500,14 @@ collect_data() {
                     ENTRIES+=("P|${sname}|w${widx}|${wname}|noagent|${w_last}")
                     SEL_NAMES+=("${sname}:w${widx}")
                     SEL_TYPES+=("P")
-                elif (( pc == 1 )); then
-                    local ap="${win_agents[$widx]%% *}"
-                    local pid="${ap%%:*}" r="${ap#*:}"
-                    local st="${r#*:}"
-                    ENTRIES+=("P|${sname}|${pid}|${wname}|${st}|${w_last}")
-                    SEL_NAMES+=("${sname}:w${widx}")
-                    SEL_TYPES+=("P")
                 else
+                    # Every window holding an agent expands, including one
+                    # holding a single agent. Collapsing the single-agent case
+                    # into the window row hid the agent behind the window's
+                    # name, so the same pane appeared as "claude" beside a
+                    # sibling and as the window name when alone -- and left a
+                    # single-agent window indistinguishable from an agent-less
+                    # one apart from its status glyph.
                     local best_pri=-1 best_st="noagent"
                     for wap in ${win_agents[$widx]}; do
                         local ws="${wap#*:}"; ws="${ws#*:}"
