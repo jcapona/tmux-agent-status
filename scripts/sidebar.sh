@@ -558,9 +558,9 @@ render() {
             [[ -n "$extra" ]] && suffix=" (${extra})"
             [[ -n "$ssh" ]] && suffix+=" [ssh]"
             local active_tag=""
-            (( is_cur )) && active_tag=" ${DIM}ACTIVE${RST}"
+            (( is_cur )) && active_tag=" ${ACC_GRN}[ACTIVE]${RST}"
             local tag_vlen=0
-            (( is_cur )) && tag_vlen=7
+            (( is_cur )) && tag_vlen=9
 
             local max_n=$((LW - 5 - icon_vlen - ${#suffix} - tag_vlen))
             (( max_n < 4 )) && max_n=4
@@ -623,7 +623,7 @@ render() {
             [[ -n "$extra" ]] && suffix=" (${extra})"
             local active_tag=""
             local tag_vlen=0
-            (( is_cur )) && { active_tag=" ${DIM}ACTIVE${RST}"; tag_vlen=7; }
+            (( is_cur )) && { active_tag=" ${ACC_GRN}[ACTIVE]${RST}"; tag_vlen=9; }
 
             local max_n=$((LW - 9 - icon_vlen - ${#suffix} - tag_vlen))
             (( max_n < 4 )) && max_n=4
@@ -688,7 +688,7 @@ render() {
 
             local active_tag=""
             local tag_vlen=0
-            (( is_cur )) && { active_tag=" ${DIM}ACTIVE${RST}"; tag_vlen=7; }
+            (( is_cur )) && { active_tag=" ${ACC_GRN}[ACTIVE]${RST}"; tag_vlen=9; }
 
             local max_n=$((LW - 6 - tag_vlen))
             (( max_n < 4 )) && max_n=4
@@ -735,7 +735,7 @@ render() {
             local tree="├"; [[ "$is_last" == "1" ]] && tree="└"
             local active_tag=""
             local tag_vlen=0
-            (( is_cur )) && { active_tag=" ${DIM}ACTIVE${RST}"; tag_vlen=7; }
+            (( is_cur )) && { active_tag=" ${ACC_GRN}[ACTIVE]${RST}"; tag_vlen=9; }
 
             # A window row carries its tmux window index in the selection
             # target ("0:w8"); an agent row carries a pane id there instead, so
@@ -793,7 +793,7 @@ render() {
             local vert="│"; [[ "$parent_is_last" == "1" ]] && vert=" "
             local active_tag=""
             local tag_vlen=0
-            (( is_cur )) && { active_tag=" ${DIM}ACTIVE${RST}"; tag_vlen=7; }
+            (( is_cur )) && { active_tag=" ${ACC_GRN}[ACTIVE]${RST}"; tag_vlen=9; }
 
             local max_n=$((LW - 10 - tag_vlen))
             (( max_n < 4 )) && max_n=4
