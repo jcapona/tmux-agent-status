@@ -23,8 +23,6 @@ fi
 
 # Start monitoring in background
 (
-    echo $$ > "$MONITOR_PID_FILE"
-
     while tmux list-sessions >/dev/null 2>&1; do
         # Check if smart-monitor is running
         if [ -f "$DAEMON_PID_FILE" ]; then
@@ -55,3 +53,10 @@ fi
         rm -f "$DAEMON_PID_FILE"
     fi
 ) &
+
+# Record the subshell's PID, not this script's. `$$` is not updated inside a
+# subshell -- it still expands to this script's PID, which exits immediately
+# below, so the guard above found a dead PID every time and started another
+# monitor on every invocation. `$!` is the background job's real PID and works
+# on bash 3.2, unlike $BASHPID (macOS ships bash 3.2).
+echo $! > "$MONITOR_PID_FILE"
