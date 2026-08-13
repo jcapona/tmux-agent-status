@@ -845,13 +845,30 @@ render() {
     done
 
     # ── Footer ──
+    # Truncated to the pane width. The frame budgets two rows for the footer
+    # (viewport_end = H - 2), so a footer longer than LW wraps onto a third and
+    # pushes the frame one row past the pane. The terminal then scrolls, which
+    # silently eats the header line and leaves every queued spinner target
+    # pointing one row below the content it was measured against -- the stray
+    # glyphs on the separator and on non-working rows.
     buf+="$sep"
     if (( WAIT_INPUT_ACTIVE )); then
-        buf+=" ${BCYN}Wait minutes for ${WAIT_INPUT_TARGET}: ${RST}${WAIT_INPUT_BUF}\033[K"
+        local fprompt=" Wait minutes for ${WAIT_INPUT_TARGET}: "
+        local fvalue="$WAIT_INPUT_BUF"
+        if (( ${#fprompt} >= LW )); then
+            fprompt="${fprompt:0:LW}"; fvalue=""
+        elif (( ${#fprompt} + ${#fvalue} > LW )); then
+            fvalue="${fvalue:0:$(( LW - ${#fprompt} ))}"
+        fi
+        buf+="${BCYN}${fprompt}${RST}${fvalue}\033[K"
     elif (( SEARCH_ACTIVE )); then
-        buf+=" ${DIM}type to filter  ⏎ select  esc cancel${RST}\033[K"
+        local ftext=" type to filter  ⏎ select  esc cancel"
+        (( ${#ftext} > LW )) && ftext="${ftext:0:LW}"
+        buf+="${DIM}${ftext}${RST}\033[K"
     else
-        buf+=" ${DIM}⏎ select  / search  w wait  p park  m mode  q quit${RST}\033[K"
+        local ftext=" ⏎ select  / search  w wait  p park  m mode  q quit"
+        (( ${#ftext} > LW )) && ftext="${ftext:0:LW}"
+        buf+="${DIM}${ftext}${RST}\033[K"
     fi
 
     # Flush entire frame at once (no flicker)
