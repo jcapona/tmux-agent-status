@@ -732,12 +732,6 @@ render() {
             fi
 
             local _icon _ic; _set_icon_color "$pstatus"
-            # Window rows are already indented under their session row, so a
-            # tree connector here adds nothing -- only their agent children
-            # draw one. Kept as a single space rather than removed outright so
-            # every width calculation below, which assumes one column at this
-            # position, keeps working unchanged.
-            local tree=" "
             # The current window is marked by bracketing its index in green
             # rather than by a trailing label. The gutter is a fixed WIDX_W+2
             # columns either way -- brackets on the current row, spaces in
@@ -757,7 +751,7 @@ render() {
                 wnum_vlen=$(( WIDX_W + 3 ))
             fi
 
-            local max_n=$((LW - 8 - wnum_vlen))
+            local max_n=$((LW - 6 - wnum_vlen))
             (( max_n < 4 )) && max_n=4
             local dagent="$agent"
             (( ${#dagent} > max_n )) && dagent="${dagent:0:$((max_n-1))}…"
@@ -769,22 +763,22 @@ render() {
             (( ! is_sel && is_cur )) && _spinner_bg="cur"
 
             if (( is_sel )); then
-                pad=$((LW - vlen - 8))
+                pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
-                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${DIM}${tree}${RST}${SEL_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
+                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
+                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
-                pad=$((LW - vlen - 8))
+                pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
-                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${tree}${RST}${CUR_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
+                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
+                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
-                pad=$((LW - vlen - 8))
+                pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
-                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${DIM}${tree} ${RST}${wnum}${DIM}${dagent}${RST}"
+                [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
+                buf+="    ${wnum}${DIM}${dagent}${RST}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
 
@@ -799,17 +793,14 @@ render() {
             [[ "$sess" == "$cur_session" && "$pane_id" == "$cur_pane" ]] && is_cur=1
 
             local _icon _ic; _set_icon_color "$pstatus"
-            # Agents carry no connector -- the indent alone nests them under
-            # their window. The active pane is marked with [*], filling the
-            # same three columns an unmarked row leaves blank, so marked and
-            # unmarked rows stay aligned. q_gap clears the window-number
-            # gutter so it tracks WIDX_W; q_pre is the resulting visible prefix
-            # width that the padding, truncation and spinner-column arithmetic
-            # below all derive from.
-            local qmark="   "
-            (( is_cur )) && qmark="${ACC_GRN}[*]${RST}"
-            local q_gap; printf -v q_gap '%*s' "$((WIDX_W + 3))" ''
-            local q_pre=$(( 11 + WIDX_W ))
+            # Agents carry no connector and no marker -- the indent nests
+            # them under their window, and the current pane is already shown by
+            # the row highlight. q_gap clears the window-number gutter so it
+            # tracks WIDX_W; q_pre is the resulting visible prefix width that
+            # the padding, truncation and spinner-column arithmetic below all
+            # derive from.
+            local q_gap; printf -v q_gap '%*s' "$((WIDX_W + 1))" ''
+            local q_pre=$(( 9 + WIDX_W ))
             local active_tag=""
 
             local max_n=$((LW - q_pre - 2))
@@ -827,19 +818,19 @@ render() {
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${q_gap}${qmark}${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
+                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${q_gap}   ${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${q_gap}${qmark}${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
+                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${q_gap}   ${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${q_gap}${qmark} ${DIM}${dagent}${RST}"
+                buf+="    ${q_gap}    ${DIM}${dagent}${RST}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
         fi
