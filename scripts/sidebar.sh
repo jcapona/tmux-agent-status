@@ -296,6 +296,15 @@ render() {
         preview_width=$((W - LW - 2))
     fi
 
+    # Width of the widest tmux window index currently in view, so the window
+    # number gutter is one fixed-width column and the names after it stay flush.
+    local WIDX_W=1 _sn
+    for _sn in "${SEL_NAMES[@]}"; do
+        if [[ "$_sn" =~ :w([0-9]+)$ ]] && (( ${#BASH_REMATCH[1]} > WIDX_W )); then
+            WIDX_W=${#BASH_REMATCH[1]}
+        fi
+    done
+
     # Count by state for the header (per-pane when multi-agent)
     local nw=0 nd=0 nwt=0
     for e in "${ENTRIES[@]}"; do
@@ -728,10 +737,20 @@ render() {
             local tag_vlen=0
             (( is_cur )) && { active_tag=" ${DIM}ACTIVE${RST}"; tag_vlen=7; }
 
-            local max_n=$((LW - 8 - tag_vlen))
+            # A window row carries its tmux window index in the selection
+            # target ("0:w8"); an agent row carries a pane id there instead, so
+            # only the former gets a number. Right-aligned to WIDX_W so the
+            # names after it stay flush. No colour codes, so ${#wnum} stays a
+            # true display width for the padding maths below.
+            local wnum=""
+            [[ "$sel_type" == "P" && "$sel_name" =~ :w([0-9]+)$ ]] &&
+                printf -v wnum "%${WIDX_W}s " "${BASH_REMATCH[1]}"
+
+            local max_n=$((LW - 8 - tag_vlen - ${#wnum}))
             (( max_n < 4 )) && max_n=4
             local dagent="$agent"
             (( ${#dagent} > max_n )) && dagent="${dagent:0:$((max_n-1))}…"
+            dagent="${wnum}${dagent}"
 
             local vlen=$(( ${#dagent} + tag_vlen ))
             local pad
