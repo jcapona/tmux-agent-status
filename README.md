@@ -49,14 +49,25 @@ If Bash is installed somewhere else, set `TMUX_AGENT_STATUS_BASH` to that path.
 
 By default the plugin:
 
-- Appends the live summary to `status-right`
 - Starts the sidebar collector daemon
 - Auto-creates a sidebar in existing and new tmux sessions
 - Binds the popup switcher, wait, park, and next-ready actions
 
 ## Claude Code Setup
 
-Add hooks to `~/.claude/settings.json`:
+Add hooks to `~/.claude/settings.json`.
+
+The paths below use tpm's default plugin directory, `~/.tmux/plugins`. tpm
+installs wherever `TMUX_PLUGIN_MANAGER_PATH` points, so if your tmux config
+lives in `~/.config/tmux` you have most likely set it to
+`~/.config/tmux/plugins` and the hook paths need to match. Check with:
+
+```bash
+tmux show-environment -g TMUX_PLUGIN_MANAGER_PATH   # unset means ~/.tmux/plugins
+```
+
+A wrong path fails silently: the agent keeps working, its state simply never
+reaches the plugin, which looks like broken tracking rather than a typo.
 
 ```json
 {
@@ -66,7 +77,7 @@ Add hooks to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/tmux/plugins/tmux-agent-status/hooks/better-hook.sh UserPromptSubmit"
+            "command": "~/.tmux/plugins/tmux-agent-status/hooks/better-hook.sh UserPromptSubmit"
           }
         ]
       }
@@ -76,7 +87,7 @@ Add hooks to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/tmux/plugins/tmux-agent-status/hooks/better-hook.sh PreToolUse"
+            "command": "~/.tmux/plugins/tmux-agent-status/hooks/better-hook.sh PreToolUse"
           }
         ]
       }
@@ -86,7 +97,7 @@ Add hooks to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/tmux/plugins/tmux-agent-status/hooks/better-hook.sh Stop"
+            "command": "~/.tmux/plugins/tmux-agent-status/hooks/better-hook.sh Stop"
           }
         ]
       }
@@ -96,7 +107,7 @@ Add hooks to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.config/tmux/plugins/tmux-agent-status/hooks/better-hook.sh Notification"
+            "command": "~/.tmux/plugins/tmux-agent-status/hooks/better-hook.sh Notification"
           }
         ]
       }
@@ -131,7 +142,7 @@ To enable Codex tracking globally, add `~/.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/codex-hook.sh SessionStart"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/codex-hook.sh SessionStart"
           }
         ]
       }
@@ -141,7 +152,7 @@ To enable Codex tracking globally, add `~/.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/codex-hook.sh UserPromptSubmit"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/codex-hook.sh UserPromptSubmit"
           }
         ]
       }
@@ -152,7 +163,7 @@ To enable Codex tracking globally, add `~/.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/codex-hook.sh PreToolUse"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/codex-hook.sh PreToolUse"
           }
         ]
       }
@@ -162,7 +173,7 @@ To enable Codex tracking globally, add `~/.codex/hooks.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/codex-hook.sh Stop"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/codex-hook.sh Stop"
           }
         ]
       }
@@ -191,7 +202,7 @@ Add hooks to `~/.config/devin/config.json`
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/devin-hook.sh SessionStart"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/devin-hook.sh SessionStart"
           }
         ]
       }
@@ -201,7 +212,7 @@ Add hooks to `~/.config/devin/config.json`
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/devin-hook.sh UserPromptSubmit"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/devin-hook.sh UserPromptSubmit"
           }
         ]
       }
@@ -211,7 +222,7 @@ Add hooks to `~/.config/devin/config.json`
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/devin-hook.sh PreToolUse"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/devin-hook.sh PreToolUse"
           }
         ]
       }
@@ -221,7 +232,7 @@ Add hooks to `~/.config/devin/config.json`
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/devin-hook.sh PostToolUse"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/devin-hook.sh PostToolUse"
           }
         ]
       }
@@ -231,7 +242,7 @@ Add hooks to `~/.config/devin/config.json`
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.config/tmux/plugins/tmux-agent-status/hooks/devin-hook.sh Stop"
+            "command": "bash ~/.tmux/plugins/tmux-agent-status/hooks/devin-hook.sh Stop"
           }
         ]
       }
@@ -389,7 +400,7 @@ Options: `chime` (default), `bell`, `fanfare`, `frog`, `speech`, `none`.
 Launch parallel AI coding sessions with isolated git worktrees:
 
 ```bash
-bash ~/.config/tmux/plugins/tmux-agent-status/scripts/deploy-sessions.sh manifest.json
+bash ~/.tmux/plugins/tmux-agent-status/scripts/deploy-sessions.sh manifest.json
 ```
 
 Each session gets a `deploy/<name>` branch, and the plugin tracks the spawned sessions automatically.
