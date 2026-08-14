@@ -167,11 +167,12 @@ add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-si
 # ── Sidebar placement (@agent-sidebar-per-window) ─────────────────
 # A sidebar is a pane, and a pane belongs to exactly one window, so "a sidebar
 # in every session" only ever means "in one window of it" -- switch windows and
-# it is gone. Off by default (one per session, as before); on gives every
-# window its own.
+# it is gone. That is not what a persistent sidebar should mean, so every window
+# gets its own by default. Set this to "off" for one per session instead, which
+# costs one process rather than one per window.
 case "$(tmux show-option -gqv "@agent-sidebar-per-window")" in
-    1|on|true|yes) sidebar_per_window=1 ;;
-    *)             sidebar_per_window=0 ;;
+    0|off|false|no) sidebar_per_window=0 ;;
+    *)              sidebar_per_window=1 ;;
 esac
 
 # Auto-create sidebar in new sessions (small delay so the session is ready).
