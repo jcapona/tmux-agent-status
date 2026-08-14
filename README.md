@@ -33,7 +33,7 @@ All agent sessions can run simultaneously across tmux sessions and panes, each t
 With [TPM](https://github.com/tmux-plugins/tpm):
 
 ```bash
-set -g @plugin 'samleeney/tmux-agent-status'
+set -g @plugin 'jcapona/tmux-agent-status'
 ```
 
 Then press `prefix + I` to install.
@@ -447,6 +447,14 @@ Works with cloud VMs, GPU boxes, and any SSH-accessible tmux host.
 - Codex CLI support is hook-based
 - Custom agents can be file-based or process-detected
 - The sidebar is the main live view; the `fzf` switcher is the quick jump and close tool
+
+## Credits
+
+Forked from [samleeney/tmux-agent-status](https://github.com/samleeney/tmux-agent-status),
+which is where the sidebar, the collector daemon and the hook-based agent
+tracking came from. This fork has since diverged: the sidebar tree was reworked,
+several defaults changed, and the status line, per-window sidebars and
+all-window listing became options.
 
 ## License
 
