@@ -5,6 +5,7 @@
 #   hooks.sh install   [claude|codex|devin|all]   add or repair the hooks
 #   hooks.sh uninstall [claude|codex|devin|all]   remove only this plugin's hooks
 #   hooks.sh status    [claude|codex|devin|all]   report what is configured
+#   hooks.sh pending                                 list agents needing install
 #
 # The target defaults to "all". Agents whose hook script is missing are skipped.
 #
@@ -63,6 +64,17 @@ target_prefix() {
     case "$1" in
         claude) printf '%s' "" ;;
         *)      printf '%s' "bash " ;;
+    esac
+}
+
+# The CLI each target belongs to. Used to decide whether an agent is worth
+# mentioning at all: a machine without codex installed should never be told its
+# codex hooks are missing.
+target_binary() {
+    case "$1" in
+        claude) printf '%s' "claude" ;;
+        codex)  printf '%s' "codex" ;;
+        devin)  printf '%s' "devin" ;;
     esac
 }
 
@@ -245,8 +257,28 @@ resolve_targets() {
 }
 
 cmd="${1:-}"
+
+QUIET=0
+if [ "${2:-}" = "-q" ] || [ "${2:-}" = "--quiet" ]; then
+    QUIET=1
+    shift
+fi
+
 targets="$(resolve_targets "${2:-all}")"
 rc=0
+
+# Targets whose CLI is on PATH and whose hooks are not already correct. Both
+# the nudge and the auto-install read this: if it is empty there is nothing to
+# do, so neither writes anything. That is what keeps a config reload from
+# rewriting settings files it does not need to touch.
+list_pending() {
+    local t
+    for t in $TARGETS; do
+        command -v "$(target_binary "$t")" >/dev/null 2>&1 || continue
+        [ -x "$(target_hook "$t")" ] || continue
+        run_python status "$t" >/dev/null 2>&1 || printf '%s\n' "$t"
+    done
+}
 
 case "$cmd" in
     install)
@@ -273,9 +305,17 @@ case "$cmd" in
     status)
         require_python
         for t in $targets; do
-            printf '\n== %s ==\n' "$t"
-            run_python status "$t" || rc=1
+            if [ "$QUIET" -eq 1 ]; then
+                run_python status "$t" >/dev/null 2>&1 || rc=1
+            else
+                printf '\n== %s ==\n' "$t"
+                run_python status "$t" || rc=1
+            fi
         done
+        ;;
+    pending)
+        require_python
+        list_pending
         ;;
     -h|--help|help|"") usage ;;
     *) die "unknown command: $cmd" ;;

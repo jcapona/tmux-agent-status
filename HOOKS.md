@@ -22,6 +22,22 @@ scripts/hooks.sh status      # what is configured, and whether it works
 scripts/hooks.sh uninstall   # remove only this plugin's entries
 ```
 
+## Having them installed for you
+
+```tmux
+set -g @agent-auto-install-hooks "on"
+```
+
+On load the plugin checks which agents are actually installed and whether their
+hooks are correct. With this off it prints a one-line hint naming the agents
+that need attention; with it on it installs them. Either way nothing is written
+when the hooks are already right -- tmux re-runs plugin files on every config
+reload, so an unconditional install would rewrite your agent configs every time
+you reload tmux.
+
+Agents whose CLI is not on `PATH` are ignored entirely, so a machine without
+Codex is never told its Codex hooks are missing.
+
 `status` is the first thing to run when an agent shows no state: a hook whose
 path does not exist fails silently, so the agent keeps working and its state
 simply never arrives. Agents whose hook script is not present are skipped, not

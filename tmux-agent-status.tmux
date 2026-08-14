@@ -189,6 +189,36 @@ if [ "$sidebar_per_window" = "1" ]; then
     add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
 fi
 
+# ── Hook configuration (@agent-auto-install-hooks) ────────────────
+# State comes from hooks, and a missing hook fails silently -- the agent works,
+# its state just never arrives -- so say something rather than let the plugin
+# look broken.
+#
+# hooks.sh pending lists only agents whose CLI is on PATH and whose hooks are
+# not already correct. When it is empty nothing happens at all, which is what
+# keeps this from rewriting config files on every config reload: tpm re-runs
+# this file every time, not just at install.
+#
+# Off by default, this only prints a hint. Turned on, it installs them. Backgrounded
+# so a config reload is never blocked on it.
+(
+    pending=$("$CURRENT_DIR/scripts/hooks.sh" pending 2>/dev/null || true)
+    if [ -n "$pending" ]; then
+        case "$(tmux show-option -gqv "@agent-auto-install-hooks")" in
+            1|on|true|yes)
+                for target in $pending; do
+                    "$CURRENT_DIR/scripts/hooks.sh" install "$target" >/dev/null 2>&1 || true
+                done
+                tmux display-message "tmux-agent-status: installed hooks for $(echo $pending | tr '\n' ' ')"
+                ;;
+            *)
+                tmux display-message \
+                    "tmux-agent-status: hooks missing for $(echo $pending | tr '\n' ' ') -- run scripts/hooks.sh install"
+                ;;
+        esac
+    fi
+) &
+
 # Start sidebar data collector daemon (one per tmux server)
 "$CURRENT_DIR/scripts/sidebar-collector.sh" &
 

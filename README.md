@@ -61,8 +61,12 @@ Install them with:
 ~/.tmux/plugins/tmux-agent-status/scripts/hooks.sh install
 ```
 
-and check them at any time with `scripts/hooks.sh status`. See
-[HOOKS.md](HOOKS.md) for what that writes, per-agent details, and manual setup.
+and check them at any time with `scripts/hooks.sh status`.
+
+If an agent's CLI is installed but its hooks are missing or broken, the plugin
+says so once on load rather than leaving you with a sidebar that never updates.
+Set `@agent-auto-install-hooks "on"` to have it install them instead of asking.
+See [HOOKS.md](HOOKS.md) for what that writes, per-agent details, and manual setup.
 
 ## Custom Agent Integration
 
@@ -175,6 +179,11 @@ set -g @agent-show-all-windows "off"       # off | on
 # every session). Off by default -- the same counts appear per session in the
 # tree below, and the row costs a line of an already narrow pane.
 set -g @agent-sidebar-header "off"         # off | on
+
+# Install missing agent hooks on load instead of only reporting them. Nothing
+# is written when the hooks are already correct, so this does not rewrite agent
+# config files every time tmux reloads.
+set -g @agent-auto-install-hooks "off"     # off | on
 
 # Switcher view (prefix + S). "tree" is the hierarchical
 # session/window/pane list (default). "agents" is a flat list of every

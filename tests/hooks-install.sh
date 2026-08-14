@@ -175,6 +175,41 @@ CODEX_OVERRIDE="$C" run "$TMP_DIR/unused-claude.json" uninstall codex
 check "codex uninstall clears codex"             "0" "$(count_ours "$C" codex-hook.sh)"
 check "  and devin is untouched"                 "5" "$(count_ours "$D" devin-hook.sh)"
 
+# ── pending: only agents that are installed and not yet configured ─
+FAKE_BIN="$TMP_DIR/bin"; mkdir -p "$FAKE_BIN"
+for b in claude codex; do printf '#!/bin/sh\nexit 0\n' > "$FAKE_BIN/$b"; chmod +x "$FAKE_BIN/$b"; done
+
+P_CLAUDE="$TMP_DIR/pending/claude.json"; P_CODEX="$TMP_DIR/pending/codex.json"
+pending() {
+    PATH="$FAKE_BIN:$PATH" \
+    CLAUDE_SETTINGS="$P_CLAUDE" CODEX_SETTINGS="$P_CODEX" DEVIN_SETTINGS="$TMP_DIR/pending/devin.json" \
+        bash "$HOOKS_SH" pending 2>/dev/null | tr '\n' ' ' | sed 's/ $//'
+}
+
+check "pending lists both unconfigured agents"   "claude codex" "$(pending)"
+
+PATH="$FAKE_BIN:$PATH" CLAUDE_SETTINGS="$P_CLAUDE" CODEX_SETTINGS="$P_CODEX" \
+    DEVIN_SETTINGS="$TMP_DIR/pending/devin.json" bash "$HOOKS_SH" install claude >/dev/null 2>&1
+check "  configured agent drops off the list"    "codex" "$(pending)"
+
+PATH="$FAKE_BIN:$PATH" CLAUDE_SETTINGS="$P_CLAUDE" CODEX_SETTINGS="$P_CODEX" \
+    DEVIN_SETTINGS="$TMP_DIR/pending/devin.json" bash "$HOOKS_SH" install codex >/dev/null 2>&1
+check "  empty once everything is configured"    "" "$(pending)"
+
+# devin is never listed: its CLI is not on the fake PATH.
+check "uninstalled agents are never nagged about" "" \
+      "$(pending | tr ' ' '\n' | grep -c devin | grep -v '^0$' || true)"
+
+# A stale path must reappear as pending, since that is the silent failure the
+# nudge exists to catch.
+python3 - "$P_CLAUDE" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["hooks"]["Stop"][0]["hooks"][0]["command"] = "/gone/hooks/better-hook.sh Stop"
+json.dump(d, open(sys.argv[1], "w"), indent=2)
+PYEOF
+check "a broken path shows up as pending again"  "claude" "$(pending)"
+
 # ── the sandbox must have held ─────────────────────────────────────
 check "no real ~/.codex written"                 "absent" \
       "$([ -e "$TMP_DIR/home/.codex/hooks.json" ] && echo "under sandbox HOME (fine)" || echo absent)"
