@@ -260,15 +260,15 @@ Default mode is sidebar-first:
 
 - Every tmux session gets a sidebar pane automatically
 - `prefix + S` opens the hierarchical `fzf` target switcher
-- `prefix + o` toggles the sidebar in the current window (opens it, or closes it when already visible)
+- `prefix + O` toggles the sidebar in the current window (opens it, or closes it when already visible)
 
 | Key | Action |
 |-----|--------|
 | `prefix + S` | Open the hierarchical `fzf` target switcher |
-| `prefix + o` | Toggle the sidebar: opens it, closes it when already visible |
+| `prefix + O` | Toggle the sidebar: opens it, closes it when already visible |
 | `prefix + N` | Jump to the next inbox item in inbox order |
 | `prefix + W` | Put the current session or pane into timed wait mode |
-| `prefix + p` | Park the current session or pane for later |
+| `prefix + P` | Park the current session or pane for later |
 
 The status bar shows one glyph per agent. The glyph identifies the agent,
 the colour identifies its status:
@@ -326,10 +326,10 @@ In multi-window sessions, sidebar and inbox rows labeled with a window name oper
 
 ```tmux
 set -g @agent-status-key "S"
-set -g @agent-sidebar-key "o"
+set -g @agent-sidebar-key "O"
 set -g @agent-next-done-key "N"
 set -g @agent-wait-key "W"
-set -g @agent-park-key "p"
+set -g @agent-park-key "P"
 
 # Compact glyph summary in tmux's status line. Off by default: the sidebar and
 # the switcher already show agent state, and status-right is usually already

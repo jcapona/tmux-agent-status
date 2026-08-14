@@ -6,7 +6,10 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 default_switcher_key="S"
 default_next_done_key="N"
 default_wait_key="W"
-default_park_key="p"
+# Uppercase throughout: tmux binds `p` to previous-window and `o` to
+# select-pane by default, and a plugin silently taking those over is a
+# surprise every user has to undo by hand.
+default_park_key="P"
 
 # Get user configuration or use defaults.
 switcher_key=$(tmux show-option -gqv "@agent-status-key")
@@ -37,7 +40,7 @@ display_method=$(tmux show-option -gqv "@agent-status-display-method")
 
 # Sidebar key (used in "both" mode; in "sidebar" mode the main switcher key is used)
 sidebar_key=$(tmux show-option -gqv "@agent-sidebar-key")
-[ -z "$sidebar_key" ] && sidebar_key="o"
+[ -z "$sidebar_key" ] && sidebar_key="O"
 
 # Helper to bind the fzf switcher using the configured display method.
 # Passes the default mode through via TMUX_AGENT_SWITCHER_MODE so the
