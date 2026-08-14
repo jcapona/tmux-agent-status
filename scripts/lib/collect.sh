@@ -68,12 +68,30 @@ _sidebar_mode() {
     esac
 }
 
+# ─── Show every window (@agent-show-all-windows) ──────────────────
+# Off by default. When on, an expanded session renders a row for every one of
+# its windows, including windows that contain no agent, and windows are ordered
+# by window index instead of by whichever agent was enumerated first.
+#
+# Read per collection cycle rather than cached to a file like _sidebar_mode, so
+# the option takes effect on a config reload without restarting the collector.
+# One `show-option` is negligible next to the `list-panes -a` each cycle runs.
+_show_all_windows() {
+    case "$(tmux show-option -gqv "@agent-show-all-windows" 2>/dev/null)" in
+        1|on|true|yes) echo 1 ;;
+        *)             echo 0 ;;
+    esac
+}
+
 # ─── Main collection ──────────────────────────────────────────────
 collect_data() {
     expire_wait_timers >/dev/null
 
     local SIDEBAR_MODE
     SIDEBAR_MODE=$(_sidebar_mode)
+
+    local SHOW_ALL_WINDOWS
+    SHOW_ALL_WINDOWS=$(_show_all_windows)
 
     # Quick change detection: skip full rebuild if nothing changed.
     (( ++_COLLECT_TICK >= 10 )) && { _COLLECT_TICK=0; _LAST_STATUS_MTIME=""; }
@@ -437,6 +455,26 @@ collect_data() {
             win_agents[$wi]+="$ap "
         done
 
+        # Windows are discovered above by walking agent panes, so a window with
+        # no agent in it is never seen. window_names already holds every window
+        # (it is filled from `list-panes -a`), so opt in by folding the rest of
+        # the session's windows in, then ordering the whole set by index.
+        if [[ "${SHOW_ALL_WINDOWS:-0}" == "1" ]]; then
+            local wkey wid
+            for wkey in "${!window_names[@]}"; do
+                [[ "$wkey" == "${sname}:"* ]] || continue
+                wid="${wkey##*:}"
+                [[ -z "${win_seen[$wid]:-}" ]] && { win_order+=("$wid"); win_seen[$wid]=1; }
+            done
+            if (( ${#win_order[@]} > 1 )); then
+                local -a _ordered=()
+                while IFS= read -r wid; do
+                    [ -n "$wid" ] && _ordered+=("$wid")
+                done < <(printf '%s\n' "${win_order[@]}" | sort -n)
+                win_order=("${_ordered[@]}")
+            fi
+        fi
+
         if (( ${#win_order[@]} == 1 )); then
             local ai=0 total=${#agents[@]}
             for ap in "${agents[@]}"; do
@@ -456,14 +494,20 @@ collect_data() {
                 local pc=0
                 for _ in ${win_agents[$widx]}; do ((pc++)); done
 
-                if (( pc == 1 )); then
-                    local ap="${win_agents[$widx]%% *}"
-                    local pid="${ap%%:*}" r="${ap#*:}"
-                    local st="${r#*:}"
-                    ENTRIES+=("P|${sname}|${pid}|${wname}|${st}|${w_last}")
+                if (( pc == 0 )); then
+                    # Only reachable with @agent-show-all-windows on. "noagent"
+                    # scores 0 in _state_pri, below every real agent state.
+                    ENTRIES+=("P|${sname}|w${widx}|${wname}|noagent|${w_last}")
                     SEL_NAMES+=("${sname}:w${widx}")
                     SEL_TYPES+=("P")
                 else
+                    # Every window holding an agent expands, including one
+                    # holding a single agent. Collapsing the single-agent case
+                    # into the window row hid the agent behind the window's
+                    # name, so the same pane appeared as "claude" beside a
+                    # sibling and as the window name when alone -- and left a
+                    # single-agent window indistinguishable from an agent-less
+                    # one apart from its status glyph.
                     local best_pri=-1 best_st="noagent"
                     for wap in ${win_agents[$widx]}; do
                         local ws="${wap#*:}"; ws="${ws#*:}"
