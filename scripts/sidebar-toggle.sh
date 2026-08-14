@@ -1,11 +1,28 @@
 #!/usr/bin/env bash
 
-# Toggle the agent sidebar pane on/off.
-# Called from a tmux keybinding registered in tmux-agent-status.tmux.
-# Optional arg: target window (e.g. "session:window"). Defaults to current.
+# Show or toggle the agent sidebar pane.
+#
+# Usage: sidebar-toggle.sh [--toggle] [target-window]
+#
+#   default    open the sidebar, or focus it when already visible
+#   --toggle   as above, but close it when already visible
+#
+# The two modes exist because the callers want different things. A keybinding
+# should toggle: pressing the same key twice is expected to undo itself. The
+# session-created hook and the start-up sweep must not -- they run over windows
+# that may already have a sidebar, and closing those would be the opposite of
+# what they are for.
+#
+# Optional target window (e.g. "session:window"). Defaults to the current one.
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIDEBAR_TITLE="agent-sidebar"
+
+MODE="show"
+if [ "${1:-}" = "--toggle" ]; then
+    MODE="toggle"
+    shift
+fi
 TARGET="${1:-}"
 
 # Read configured width.
@@ -43,7 +60,11 @@ find_file_sidebar() {
 existing=$(find_sidebar_in_window)
 
 if [ -n "$existing" ]; then
-    # Sidebar visible in current window — focus it (don't kill).
+    if [ "$MODE" = "toggle" ]; then
+        tmux kill-pane -t "$existing"
+        exit 0
+    fi
+    # Visible already, and not a toggle: focus it rather than closing.
     tmux select-pane -t "$existing"
 else
     file_sidebar=$(find_file_sidebar)

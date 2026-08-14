@@ -67,11 +67,11 @@ case "$switcher_style" in
         bind_fzf_switcher "$switcher_key"
         ;;
     sidebar)
-        tmux bind-key "$switcher_key" run-shell "$CURRENT_DIR/scripts/sidebar-toggle.sh"
+        tmux bind-key "$switcher_key" run-shell "$CURRENT_DIR/scripts/sidebar-toggle.sh --toggle"
         ;;
     both|*)
         bind_fzf_switcher "$switcher_key"
-        tmux bind-key "$sidebar_key" run-shell "$CURRENT_DIR/scripts/sidebar-toggle.sh"
+        tmux bind-key "$sidebar_key" run-shell "$CURRENT_DIR/scripts/sidebar-toggle.sh --toggle"
         ;;
 esac
 

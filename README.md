@@ -260,12 +260,12 @@ Default mode is sidebar-first:
 
 - Every tmux session gets a sidebar pane automatically
 - `prefix + S` opens the hierarchical `fzf` target switcher
-- `prefix + o` focuses or creates the sidebar in the current window
+- `prefix + o` toggles the sidebar in the current window (opens it, or closes it when already visible)
 
 | Key | Action |
 |-----|--------|
 | `prefix + S` | Open the hierarchical `fzf` target switcher |
-| `prefix + o` | Focus or create the sidebar |
+| `prefix + o` | Toggle the sidebar: opens it, closes it when already visible |
 | `prefix + N` | Jump to the next inbox item in inbox order |
 | `prefix + W` | Put the current session or pane into timed wait mode |
 | `prefix + p` | Park the current session or pane for later |
