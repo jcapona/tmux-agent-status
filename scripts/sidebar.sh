@@ -20,6 +20,15 @@ source "$CURRENT_DIR/lib/sidebar-selection.sh"
 PREVIEW_MODE=0
 [[ "${1:-}" == "--preview" ]] && PREVIEW_MODE=1
 
+# Counts row at the top of the sidebar (@agent-sidebar-header). Off by default:
+# the same totals are visible per session in the tree below, and the row costs
+# one line of a pane that is usually the shortest thing on screen. Read once --
+# render() runs on every refresh, and this cannot change without a reload.
+case "$(tmux show-option -gqv @agent-sidebar-header 2>/dev/null)" in
+    1|on|true|yes) SHOW_HEADER=1 ;;
+    *)             SHOW_HEADER=0 ;;
+esac
+
 # ─── Terminal setup ───────────────────────────────────────────────
 cleanup() {
     [ -n "${SELF_PANE:-}" ] && unregister_sidebar_client "$SELF_PANE"
@@ -340,7 +349,7 @@ render() {
         buf+=" ${BOLD}x${RST} ${CLOSE_CONFIRM_PROMPT}${DIM} [Enter confirm, Esc cancel]${RST}\033[K\n"
     elif (( SEARCH_ACTIVE )); then
         buf+=" ${BOLD}/${RST}${SEARCH_QUERY}${DIM}▏${RST}\033[K\n"
-    else
+    elif (( SHOW_HEADER )); then
         buf+=" "
         (( nw > 0 ))  && buf+="${BYEL}${SPINNER_FRAMES[$SPINNER_TICK]}${nw}${RST} "
         (( nd > 0 ))  && buf+="${BGRN}✓${nd}${RST} "
@@ -349,7 +358,13 @@ render() {
         buf+="\033[K\n"
         (( nw > 0 )) && _queue_spinner_target 1 2 "none" "header"
     fi
-    ((line++))
+    # Only advance when a row was actually emitted. Search and close-confirm
+    # always emit one; the counts row does not when disabled, and counting a
+    # line that was never written would leave a blank gap and push the frame
+    # one row long.
+    if (( CLOSE_CONFIRM_ACTIVE || SEARCH_ACTIVE || SHOW_HEADER )); then
+        ((line++))
+    fi
 
     local sep="${DIM}"
     local i; for ((i=0; i<LW; i++)); do sep+="─"; done

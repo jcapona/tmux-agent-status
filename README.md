@@ -363,6 +363,11 @@ set -g @agent-sidebar-per-window "off"     # off | on
 # window index rather than by whichever agent was found first.
 set -g @agent-show-all-windows "off"       # off | on
 
+# Totals row at the very top of the sidebar (working / done / waiting across
+# every session). Off by default -- the same counts appear per session in the
+# tree below, and the row costs a line of an already narrow pane.
+set -g @agent-sidebar-header "off"         # off | on
+
 # Switcher view (prefix + S). "tree" is the hierarchical
 # session/window/pane list (default). "agents" is a flat list of every
 # agent pane sorted by status. Toggle mid-session with ctrl-f.
