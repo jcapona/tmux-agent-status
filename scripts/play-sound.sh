@@ -15,6 +15,20 @@ export XDG_RUNTIME_DIR DISPLAY
 
 SOUND_TYPE="${1:-notify}"
 
+# ── Master switch (@agent-sound) ──────────────────────────────────
+# Off by default. Audible notifications are the kind of default that is
+# unwelcome on a shared desk or a call, and the plugin already signals state
+# visually in the sidebar, the switcher and (optionally) the status line.
+#
+# Gated here rather than at each of the five call sites, so nothing can play a
+# sound by forgetting the check. @agent-notification-sound / @agent-ask-sound
+# still choose *which* sound once enabled, and "none" still mutes an individual
+# event without turning the whole thing off.
+case "$(tmux show-option -gqv @agent-sound 2>/dev/null)" in
+    1|on|true|yes) ;;
+    *)             exit 0 ;;
+esac
+
 # For "ask" events, use a distinct sound option (falls back to notification sound)
 if [ "$SOUND_TYPE" = "ask" ]; then
     SOUND_CHOICE=$(tmux show-option -gqv @agent-ask-sound 2>/dev/null)

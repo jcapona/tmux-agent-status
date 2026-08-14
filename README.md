@@ -372,6 +372,10 @@ set -g @agent-switcher-default-mode "tree"  # tree | agents
 # agents view.
 set -g @agent-sidebar-mode-key "m"
 
+# Master switch for audible notifications. Off by default; the options below
+# only take effect once this is on.
+set -g @agent-sound "off"                  # off | on
+
 # Sound played when an agent moves into the `ask` state. Same values as
 # @agent-notification-sound.
 set -g @agent-ask-sound "Funk"
@@ -387,13 +391,22 @@ The sidebar has the same two views, toggled with `m` from inside the sidebar pan
 
 ## Notification Sounds
 
-Play a sound when an agent finishes:
+Sound is off by default. Turn it on with:
+
+```tmux
+set -g @agent-sound "on"                   # off | on
+```
+
+Then choose which sound plays when an agent finishes:
 
 ```tmux
 set -g @agent-notification-sound "chime"
 ```
 
 Options: `chime` (default), `bell`, `fanfare`, `frog`, `speech`, `none`.
+
+`@agent-sound` is the master switch: with it off nothing plays regardless of the
+options above. `none` mutes a single event while leaving the other enabled.
 
 ## Multi-Agent Deploy
 
