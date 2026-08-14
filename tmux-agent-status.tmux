@@ -91,13 +91,31 @@ if [ "$control_mode" = "1" ]; then
     exit 0
 fi
 
-# Set up tmux status line integration
-tmux set-option -g status-interval 1
+# ── Status line integration (@agent-status-line) ──────────────────
+# Off by default: the sidebar and the fzf switcher already show agent state,
+# and the glyph summary competes for room on a status-right that most configs
+# have already spent on their own modules. Set @agent-status-line "on" to get
+# it back.
+#
+# status-interval is gated on the same option. Forcing a 1s poll only pays for
+# itself when the glyphs are actually being drawn; with the module off it is
+# pure overhead, so the user's own interval is left alone.
+case "$(tmux show-option -gqv "@agent-status-line")" in
+    1|on|true|yes) status_line_enabled=1 ;;
+    *)             status_line_enabled=0 ;;
+esac
 
-# Check if our status is already in the status-right
 current_status_right=$(tmux show-option -gqv status-right)
-if ! echo "$current_status_right" | grep -q "status-line.sh"; then
-    tmux set-option -ag status-right " #($CURRENT_DIR/scripts/status-line.sh)"
+if [ "$status_line_enabled" = "1" ]; then
+    tmux set-option -g status-interval 1
+    if ! echo "$current_status_right" | grep -q "status-line.sh"; then
+        tmux set-option -ag status-right " #($CURRENT_DIR/scripts/status-line.sh)"
+    fi
+elif echo "$current_status_right" | grep -q "status-line.sh"; then
+    # Turned off after having been on: strip our module back out so the change
+    # takes effect on a config reload instead of needing a server restart.
+    tmux set-option -g status-right \
+        "$(printf '%s' "$current_status_right" | sed 's| *#([^)]*status-line\.sh[^)]*)||g')"
 fi
 
 # Append a hook only when an identical entry is not already registered.

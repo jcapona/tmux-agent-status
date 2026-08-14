@@ -1,6 +1,6 @@
 # tmux-agent-status
 
-Sidebar-first AI agent session manager for tmux. It gives each tmux session a persistent status sidebar, keeps a compact summary in the status line, and adds a hierarchical `fzf` target switcher for fast jumps and cleanup across agent sessions, windows, and panes.
+Sidebar-first AI agent session manager for tmux. It gives each tmux session a persistent status sidebar, adds a hierarchical `fzf` target switcher for fast jumps and cleanup across agent sessions, windows, and panes, and can optionally keep a compact summary in the status line.
 
 Claude Code and Codex CLI are both integrated through hooks, so their states come from agent lifecycle events rather than fragile process polling. Custom agents can still integrate through status files or collector extensions.
 
@@ -14,7 +14,7 @@ Demo video: [`demo/full.mp4`](demo/full.mp4)
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
-- Compact status-line summary with finish notifications
+- Optional compact status-line summary with finish notifications (`@agent-status-line`, off by default)
 - Works across multi-pane sessions, worktrees, and remote tmux sessions
 
 ## Supported Agents
@@ -330,6 +330,13 @@ set -g @agent-sidebar-key "o"
 set -g @agent-next-done-key "N"
 set -g @agent-wait-key "W"
 set -g @agent-park-key "p"
+
+# Compact glyph summary in tmux's status line. Off by default: the sidebar and
+# the switcher already show agent state, and status-right is usually already
+# spent on other modules. Turning it on also sets status-interval to 1 so the
+# glyphs animate; turning it back off removes the module on the next config
+# reload, but leaves status-interval where it is.
+set -g @agent-status-line "off"            # off | on
 
 set -g @agent-switcher-style "both"        # popup | sidebar | both
 set -g @agent-status-display-method "popup" # popup | window
