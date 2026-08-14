@@ -347,15 +347,30 @@ set -g @agent-sidebar-width "42"
 # every window its own sidebar, at the cost of one renderer process per window.
 set -g @agent-sidebar-per-window "off"     # off | on
 
+# By default only windows containing a recognised agent are listed. On also
+# lists windows with no agent (shown with a dim dot), and orders windows by
+# window index rather than by whichever agent was found first.
+set -g @agent-show-all-windows "off"       # off | on
+
 # Switcher view (prefix + S). "tree" is the hierarchical
 # session/window/pane list (default). "agents" is a flat list of every
 # agent pane sorted by status. Toggle mid-session with ctrl-f.
 set -g @agent-switcher-default-mode "tree"  # tree | agents
+
+# Key, pressed inside the sidebar pane, that toggles it between tree and
+# agents view.
+set -g @agent-sidebar-mode-key "m"
+
+# Sound played when an agent moves into the `ask` state. Same values as
+# @agent-notification-sound.
+set -g @agent-ask-sound "Funk"
 ```
 
 `@agent-switcher-style "both"` is the default. It keeps the persistent sidebar and leaves `prefix + S` as the lightweight popup switcher.
 
 The switcher popup has two views. **Tree** (default) is the hierarchical session/window/pane list; tab expands/collapses. **Agents** is a flat list of every agent pane (any status) sorted by priority — `ask`, `done`, `working`, `wait`, `parked` — with a live preview pane and 2-second refresh. Press `ctrl-f` inside the popup to toggle between views.
+
+Within a session the sidebar lists its windows, each prefixed by its tmux window index; the current window has its index bracketed and highlighted. Every window holding an agent expands to show those agent panes beneath it, including a window with only one — a row therefore always says whether it is a window or an agent, rather than a lone agent borrowing its window's name. Windows with no agent appear only when `@agent-show-all-windows` is on.
 
 The sidebar has the same two views, toggled with `m` from inside the sidebar pane (alongside `w`/`p`/`x` for wait/park/close). In **tree** mode the SESSIONS section lists every session and collapses single-agent sessions to one row; the INBOX section surfaces `done`/`ask` work. In **agents** mode the SESSIONS section is filtered to sessions/worktrees that contain agent panes and every agent pane is expanded; INBOX is suppressed because it would duplicate the same rows.
 
