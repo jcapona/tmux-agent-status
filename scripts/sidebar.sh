@@ -294,6 +294,22 @@ render() {
     read -r H W < <(stty size 2>/dev/null || echo "24 30")
     W=${W:-30}; H=${H:-24}
 
+    # Re-assert this pane's client registration if it has gone missing.
+    #
+    # Registration happened once, during start-up. Anything that removed the
+    # entry afterwards -- a plugin update replacing the scripts, the collector
+    # being restarted, a stale-entry sweep misfiring -- left the sidebar
+    # permanently unable to receive USR1/USR2. It kept redrawing on its own
+    # poll timer, so the failure was invisible: the pane looked healthy and
+    # simply stopped being event-driven.
+    #
+    # A missing-file test per frame is far cheaper than the redraw it guards,
+    # and re-registering is idempotent.
+    if (( ! PREVIEW_MODE )) && [[ -n "${SELF_PANE:-}" ]] \
+       && [[ ! -f "$SIDEBAR_CLIENT_DIR/${SELF_PANE}.pid" ]]; then
+        register_sidebar_client "$SELF_PANE" >/dev/null 2>&1 || true
+    fi
+
     # In preview mode, session list takes left portion; preview takes right.
     local LW=$W  # list width
     local preview_col=0 preview_width=0
