@@ -4,10 +4,6 @@ Sidebar-first AI agent session manager for tmux. It gives each tmux session a pe
 
 Claude Code and Codex CLI are both integrated through hooks, so their states come from agent lifecycle events rather than fragile process polling. Custom agents can still integrate through status files or collector extensions.
 
-[![tmux-agent-status demo screenshot](demo/full.png)](demo/full.mp4)
-
-Demo video: [`demo/full.mp4`](demo/full.mp4)
-
 ## Features
 
 - Persistent sidebar in every window of every session (`@agent-sidebar-per-window`, on by default)
