@@ -14,7 +14,7 @@ Demo video: [`demo/full.mp4`](demo/full.mp4)
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
-- Optional compact status-line summary with finish notifications (`@agent-status-line`, off by default)
+- Optional compact status-line summary (`@agent-status-line`) and finish sounds (`@agent-sound`), both off by default
 - Works across multi-pane sessions, worktrees, and remote tmux sessions
 
 ## Supported Agents
@@ -281,8 +281,8 @@ Default mode is sidebar-first:
 | `prefix + W` | Put the current session or pane into timed wait mode |
 | `prefix + P` | Park the current session or pane for later |
 
-The status bar shows one glyph per agent. The glyph identifies the agent,
-the colour identifies its status:
+With `@agent-status-line "on"`, the status bar shows one glyph per agent. The
+glyph identifies the agent, the colour identifies its status:
 
 | Agent | Glyph |
 |-------|-------|
@@ -306,7 +306,7 @@ unison. Glyphs and colours are defined in
 [`scripts/lib/status-summary.sh`](scripts/lib/status-summary.sh) if you want
 different ones.
 
-Parked sessions stay visible in the sidebar and switcher, but are excluded from the status-line summary.
+Parked sessions stay visible in the sidebar and switcher, but are excluded from the status-line summary when it is enabled.
 
 Inside the popup switcher:
 
@@ -454,6 +454,7 @@ Works with cloud VMs, GPU boxes, and any SSH-accessible tmux host.
                  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
                  │ sidebar pane │   │ status line  │   │ fzf switcher │
                  └──────────────┘   └──────────────┘   └──────────────┘
+                                    status line is opt-in
 ```
 
 - Claude Code support is hook-based
