@@ -74,9 +74,16 @@ else
         new_pane=$(tmux split-window -v -t "$file_sidebar" \
             -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
     else
-        # No file manager — create a left-side split.
+        # No file manager — create a left-side split spanning the whole window.
+        #
+        # -f is what makes this the full window height. Without it the split is
+        # relative to the target pane, so opening the sidebar in a window that
+        # was already split top/bottom produced a sidebar as tall as whichever
+        # pane happened to be leftmost, and a later split elsewhere left it
+        # stranded at that height. With -f the sidebar always spans the window
+        # and subsequent splits divide only the remaining area.
         leftmost=$(tmux list-panes "${target_flag[@]}" -F '#{pane_left} #{pane_id}' | sort -n | head -1 | awk '{print $2}')
-        new_pane=$(tmux split-window -hbl "$width" -t "$leftmost" \
+        new_pane=$(tmux split-window -fhb -l "$width" -t "$leftmost" \
             -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
     fi
 
