@@ -161,8 +161,29 @@ add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signa
 add_hook_once after-kill-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 
-# Auto-create sidebar in new sessions (small delay so the session is ready)
-add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh'"
+# ── Sidebar placement (@agent-sidebar-per-window) ─────────────────
+# A sidebar is a pane, and a pane belongs to exactly one window, so "a sidebar
+# in every session" only ever means "in one window of it" -- switch windows and
+# it is gone. Off by default (one per session, as before); on gives every
+# window its own.
+case "$(tmux show-option -gqv "@agent-sidebar-per-window")" in
+    1|on|true|yes) sidebar_per_window=1 ;;
+    *)             sidebar_per_window=0 ;;
+esac
+
+# Auto-create sidebar in new sessions (small delay so the session is ready).
+# The target is passed explicitly: sidebar-toggle.sh falls back to the *current*
+# window, which for a session created detached (`new-session -d`, how
+# tmux-resurrect restores and how most scripted sessions start) is not in the
+# new session at all -- so the sidebar landed in whatever window happened to be
+# focused, and the new session silently got none.
+add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
+
+# after-new-window does not fire for a session's first window, so this covers
+# windows 2..n and the session-created hook above covers the first.
+if [ "$sidebar_per_window" = "1" ]; then
+    add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
+fi
 
 # Start sidebar data collector daemon (one per tmux server)
 "$CURRENT_DIR/scripts/sidebar-collector.sh" &
@@ -171,11 +192,24 @@ add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/s
 if tmux list-sessions >/dev/null 2>&1; then
     "$CURRENT_DIR/scripts/daemon-monitor.sh" >/dev/null 2>&1
 
-    # Create sidebar in all existing sessions that don't have one
-    for sess in $(tmux list-sessions -F '#{session_name}' 2>/dev/null); do
-        has_sidebar=$(tmux list-panes -t "$sess" -F '#{pane_title}' 2>/dev/null | grep -c "agent-sidebar")
+    # Backfill anything that has no sidebar yet: every window when per-window
+    # is on, otherwise one per session as before. Read line by line so session
+    # names containing spaces are not split.
+    if [ "$sidebar_per_window" = "1" ]; then
+        backfill_list=$(tmux list-windows -a -F '#{window_id}' 2>/dev/null)
+    else
+        backfill_list=$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+    fi
+    while IFS= read -r tgt; do
+        [ -n "$tgt" ] || continue
+        has_sidebar=$(tmux list-panes -t "$tgt" -F '#{pane_title}' 2>/dev/null | grep -c "agent-sidebar")
         if [ "$has_sidebar" -eq 0 ]; then
-            tmux run-shell -t "$sess" -b "$CURRENT_DIR/scripts/sidebar-toggle.sh" 2>/dev/null
+            # Passed as an argument, not via `run-shell -t`: that flag sets the
+            # target for format expansion, not the window the script itself
+            # resolves, so the sidebar would go to the active window instead.
+            tmux run-shell -b "$(printf '%q %q' "$CURRENT_DIR/scripts/sidebar-toggle.sh" "$tgt")" 2>/dev/null
         fi
-    done
+    done <<EOF
+$backfill_list
+EOF
 fi

@@ -10,7 +10,7 @@ Demo video: [`demo/full.mp4`](demo/full.mp4)
 
 ## Features
 
-- Persistent sidebar in every tmux session
+- Persistent sidebar in every tmux session (or every window, with `@agent-sidebar-per-window`)
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
@@ -341,6 +341,11 @@ set -g @agent-status-line "off"            # off | on
 set -g @agent-switcher-style "both"        # popup | sidebar | both
 set -g @agent-status-display-method "popup" # popup | window
 set -g @agent-sidebar-width "42"
+
+# A sidebar is a pane, so it lives in exactly one window -- switch windows and
+# it is not there. Off keeps the original behaviour (one per session); on gives
+# every window its own sidebar, at the cost of one renderer process per window.
+set -g @agent-sidebar-per-window "off"     # off | on
 
 # Switcher view (prefix + S). "tree" is the hierarchical
 # session/window/pane list (default). "agents" is a flat list of every
