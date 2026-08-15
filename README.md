@@ -70,11 +70,12 @@ See [HOOKS.md](HOOKS.md) for what that writes, per-agent details, and manual set
 
 ## Custom Agent Integration
 
-Integrate any AI coding tool with either of these approaches:
+Integrate any AI coding tool with any of these approaches:
 
 1. Write `working`, `done`, or `wait` to `~/.cache/tmux-agent-status/<session>.status`
 2. For pane-level parking or per-pane state, write to `~/.cache/tmux-agent-status/panes/<session>_<pane>.status` and `~/.cache/tmux-agent-status/parked/<session>_<pane>.parked`
-3. Extend the collector scan in [`scripts/lib/collect.sh`](scripts/lib/collect.sh) if you want automatic process-based tracking
+3. Send a one-line event to the Unix socket at `~/.cache/tmux-agent-status/agent-daemon.sock` (if available): `echo "claude mysession %3 working" | nc -U ~/.cache/tmux-agent-status/agent-daemon.sock`. The protocol is `<agent> <session> <pane> <state>` (use `-` for pane on session-level events). This is a fast path — it writes the same status files internally, so the file-based path is always available as a fallback.
+4. Extend the collector scan in [`scripts/lib/collect.sh`](scripts/lib/collect.sh) if you want automatic process-based tracking
 
 ## Usage
 

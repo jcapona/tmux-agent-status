@@ -65,7 +65,18 @@ if ! _claim; then
     rm -f "$PID_FILE"
     _claim || exit 0
 fi
-trap 'rm -f "$PID_FILE"' EXIT
+# The PID file is written by _claim as part of the atomic claim, so there is
+# no separate write here -- a claim must never exist without naming its owner.
+
+# Start the optional Unix socket server for fast-path hook events.
+# It runs as a child process; when the collector exits, the trap kills it
+# and cleans up the socket file. If nc doesn't support Unix sockets, the
+# script exits silently and the file-based path is the only path.
+SOCKET_PID=""
+"$SCRIPT_DIR/agent-socket.sh" &
+SOCKET_PID=$!
+
+trap 'rm -f "$PID_FILE"; [ -n "$SOCKET_PID" ] && kill "$SOCKET_PID" 2>/dev/null; rm -f "$STATUS_DIR/agent-daemon.sock"' EXIT
 
 # Persistent cross-cycle state (survives across collect_data calls)
 declare -A KNOWN_AGENTS=()
