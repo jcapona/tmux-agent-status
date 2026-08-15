@@ -140,9 +140,10 @@ while true; do
         exit 0
     fi
 
-    if (( SUMMARY_HAS_WORKING )); then
-        signal_sidebar_clients USR2 active
-    fi
+    # Animation is local: each sidebar advances its own spinner on its
+    # own read-timeout timer (0.25s when working). The collector no longer
+    # broadcasts USR2 — that was N signal deliveries + a tmux list-panes
+    # IPC call every 0.25s, purely for cosmetic spinners.
 
     sleep 0.25
     tick=$(( (tick + 1) % 4 ))

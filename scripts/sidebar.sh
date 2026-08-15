@@ -44,6 +44,10 @@ handle_refresh_signal() {
 }
 
 handle_animation_signal() {
+    # Kept for backward compatibility -- the collector no longer sends USR2.
+    # Animation is driven locally by the main loop's read-timeout timer
+    # (0.25s when _HAS_WORKING). The visibility gate is retained so a stray
+    # USR2 from an older collector still cannot animate an off-screen pane.
     (( _HAS_WORKING && ${_SELF_VISIBLE:-1} )) && ANIMATE_TICK=1
 }
 
