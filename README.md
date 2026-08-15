@@ -166,8 +166,10 @@ set -g @agent-sidebar-width "42"
 
 # Every window gets its own sidebar (default). A sidebar is a pane, so it lives
 # in exactly one window -- one per session means it vanishes the moment you
-# switch windows. Set "off" for one per session instead, which costs one
-# renderer process rather than one per window.
+# switch windows. With per-window on, only one window per session runs the
+# full renderer; other windows get a lightweight display proxy that reads the
+# renderer's output from a shared file. Set "off" for one renderer per session
+# with no proxies, which costs one process rather than one per window.
 set -g @agent-sidebar-per-window "on"      # on | off
 
 # By default only windows containing a recognised agent are listed. On also
