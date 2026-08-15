@@ -3,6 +3,11 @@
 # Sidebar data collector daemon.
 # One instance per tmux server. Sources lib/collect.sh for data collection
 # and writes a cache file that all sidebar renderers read from.
+#
+# Uses filesystem event notification (fswatch or inotifywait) when available
+# for event-driven collection — zero work when no status files change. Falls
+# back to 1s polling when neither tool is installed. A periodic liveness
+# sweep runs every 30s to catch process exits that don't touch files.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/session-status.sh"
@@ -123,28 +128,76 @@ publish_status_summary() {
     fi
 }
 
-tick=0
-while true; do
+# Run one collection cycle: collect, and if data changed, serialize + publish + signal.
+run_collect_cycle() {
     tmux list-sessions >/dev/null 2>&1 || exit 0
+    collect_data
+    if (( _COLLECT_CHANGED )); then
+        serialize_cache
+        publish_status_summary
+        signal_sidebar_clients USR1 all
+    fi
+}
 
-    if (( tick == 0 )); then
-        collect_data
-        if (( _COLLECT_CHANGED )); then
-            serialize_cache
-            publish_status_summary
-            (( ! RUN_ONCE )) && signal_sidebar_clients USR1 all
+# ─── --once mode: collect a single snapshot and exit ──────────────
+if (( RUN_ONCE )); then
+    tmux list-sessions >/dev/null 2>&1 || exit 0
+    collect_data
+    if (( _COLLECT_CHANGED )); then
+        serialize_cache
+        publish_status_summary
+    fi
+    exit 0
+fi
+
+# ─── Normal mode: event-driven collection ─────────────────────────
+LIVENESS_INTERVAL=30  # seconds between forced liveness sweeps
+
+# Determine which filesystem watcher to use, if any.
+if command -v fswatch >/dev/null 2>&1; then
+    # fswatch: cross-platform (FSEvents on macOS, inotify on Linux).
+    # -l 1: batch events with 1-second latency (reduces noise from rapid writes).
+    # -r:  watch recursively so panes/, wait/, parked/ are all covered.
+    WATCHER="fswatch"
+elif command -v inotifywait >/dev/null 2>&1; then
+    # inotifywait: Linux only, from inotify-tools.
+    # -m:  monitor mode (don't exit after first event).
+    # -q:  quiet (don't print event descriptions).
+    # -e:  which events to watch.
+    WATCHER="inotifywait"
+else
+    WATCHER=""
+fi
+
+if [ -n "$WATCHER" ]; then
+    if [ "$WATCHER" = "fswatch" ]; then
+        exec 3< <(fswatch -l 1 -r "$STATUS_DIR" 2>/dev/null)
+    else
+        exec 3< <(inotifywait -m -q -e modify,create,delete,move \
+            "$STATUS_DIR" "$PANE_DIR" "$WAIT_DIR" "$PARKED_DIR" 2>/dev/null)
+    fi
+
+    while true; do
+        if read -t "$LIVENESS_INTERVAL" -r _ <&3; then
+            # Filesystem event — collect and signal if changed.
+            run_collect_cycle
+        else
+            # Read timeout — run a forced liveness sweep to catch process
+            # exits and wait-timer expirations that don't touch files.
+            _LAST_STATUS_MTIME=""
+            run_collect_cycle
         fi
-    fi
+    done
+else
+    # Fallback: 1s polling. Still event-driven in practice because collect_data
+    # has its own mtime-based change detection — the 1s sleep is just the poll
+    # interval. The liveness sweep is implicit: every collect_data call does
+    # ps + tmux list-panes when the mtime changes, and expire_wait_timers runs
+    # on every call.
+    echo "tmux-agent-status: fswatch/inotifywait not found, falling back to 1s polling" >&2
 
-    if (( RUN_ONCE )); then
-        exit 0
-    fi
-
-    # Animation is local: each sidebar advances its own spinner on its
-    # own read-timeout timer (0.25s when working). The collector no longer
-    # broadcasts USR2 — that was N signal deliveries + a tmux list-panes
-    # IPC call every 0.25s, purely for cosmetic spinners.
-
-    sleep 0.25
-    tick=$(( (tick + 1) % 4 ))
-done
+    while true; do
+        run_collect_cycle
+        sleep 1
+    done
+fi
