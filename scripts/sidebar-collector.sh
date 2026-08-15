@@ -184,8 +184,11 @@ if [ -n "$WATCHER" ]; then
         else
             # Read timeout — run a forced liveness sweep to catch process
             # exits and wait-timer expirations that don't touch files.
+            # Also poll remote SSH session status (previously handled by the
+            # separate smart-monitor daemon + daemon-monitor watcher).
             _LAST_STATUS_MTIME=""
             run_collect_cycle
+            "$SCRIPT_DIR/../smart-monitor.sh" update >/dev/null 2>&1 || true
         fi
     done
 else

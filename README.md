@@ -284,7 +284,8 @@ Works with cloud VMs, GPU boxes, and any SSH-accessible tmux host.
 - Claude Code support is hook-based
 - Codex CLI support is hook-based
 - Custom agents can be file-based or process-detected
-- The collector uses filesystem event notification (`fswatch` or `inotifywait`) when available, so it does zero work when no status files change. It falls back to 1s polling when neither is installed. A 30s liveness sweep catches process exits that don't touch files.
+- The collector uses filesystem event notification (`fswatch` or `inotifywait`) when available, so it does zero work when no status files change. It falls back to 1s polling when neither is installed. A 30s liveness sweep catches process exits that don't touch files and polls remote SSH session status.
+- The collector is the single always-running process. The previous three-process stack (collector + smart-monitor + daemon-monitor) is gone — the collector handles SSH status polling in its own liveness sweep.
 - Only one sidebar renderer runs per session; other windows get a lightweight display proxy that reads the renderer's output from a shared file
 - The sidebar is the main live view; the `fzf` switcher is the quick jump and close tool
 

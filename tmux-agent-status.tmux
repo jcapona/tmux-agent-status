@@ -126,7 +126,7 @@ fi
 # tmux has no idempotent set-hook: `-ga` appends unconditionally, so every
 # config reload stacks another copy. Reloading often leaves dozens of duplicates
 # (observed: 84 entries on session-created after ~28 reloads, which fired
-# daemon-monitor.sh 28 times per new session). Plain `-g` is not an option --
+# the old monitor 28 times per new session). Plain `-g` is not an option --
 # it replaces the whole array and would silently delete hooks the user or other
 # plugins registered on the same event.
 #
@@ -141,9 +141,13 @@ add_hook_once() {
     fi
 }
 
-# Set up daemon monitor to ensure smart-monitor is always running
-# Start daemon monitor on session created
-add_hook_once session-created "run-shell '$CURRENT_DIR/scripts/daemon-monitor.sh'"
+# Set up daemon monitor to ensure the collector is always running.
+# The collector is self-supervising: it runs as a singleton (PID-file guard)
+# and self-exits when tmux has no sessions. We start it on session-created
+# in case it was killed or tmux was restarted. The old two-process monitor
+# smart-monitor two-process stack is gone — the collector handles SSH
+# status polling in its own 30s liveness sweep.
+add_hook_once session-created "run-shell -b '$CURRENT_DIR/scripts/sidebar-collector.sh'"
 
 # Sidebars are event-driven: wake them when tmux client focus changes so they
 # can refresh ACTIVE markers without polling in the pane process.
@@ -224,7 +228,8 @@ fi
 
 # Also start it now if tmux is already running
 if tmux list-sessions >/dev/null 2>&1; then
-    "$CURRENT_DIR/scripts/daemon-monitor.sh" >/dev/null 2>&1
+    # Ensure the collector is running (it self-exits if tmux has no sessions).
+    "$CURRENT_DIR/scripts/sidebar-collector.sh" >/dev/null 2>&1 &
 
     # Backfill anything that has no sidebar yet: every window when per-window
     # is on, otherwise one per session as before. Read line by line so session
