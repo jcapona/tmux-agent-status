@@ -923,7 +923,13 @@ render() {
     # in other windows of this session can replay it without running
     # their own renderer. Temp+rename for atomicity.
     if [[ -n "${RENDER_FILE:-}" ]]; then
-        printf '\033[H%b' "$buf" > "${RENDER_FILE}.tmp" && mv -f "${RENDER_FILE}.tmp" "$RENDER_FILE"
+        # Per-process temp name. One renderer per session is the intent, but a
+        # fixed .tmp turns any violation of that into visible error spam: every
+        # loser of the race prints "mv: ... No such file or directory" into its
+        # own pane, because a sidebar pane's stdout is the pane. $$ makes the
+        # write correct regardless of how many renderers exist.
+        local render_tmp="${RENDER_FILE}.tmp.$$"
+        printf '\033[H%b' "$buf" > "$render_tmp" && mv -f "$render_tmp" "$RENDER_FILE"
     fi
 
     # ── Preview panel (popup mode only) ──
