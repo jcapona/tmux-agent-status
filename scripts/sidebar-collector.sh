@@ -18,15 +18,30 @@ if [[ "${1:-}" == "--once" ]]; then
     RUN_ONCE=1
 fi
 
-# Singleton guard
-if [ -f "$PID_FILE" ]; then
+# Singleton guard.
+#
+# The previous check-then-write test let two collectors start together: each
+# read a missing or stale PID file, each concluded no collector was running,
+# and each wrote its own PID. The second overwrote the first, so the first's
+# EXIT trap then deleted a PID file naming the second. Observed repeatedly as
+# two live collectors after a config reload, doubling the daemon's cost.
+#
+# mkdir is atomic: exactly one process can create a given directory, so the
+# claim and the check are a single indivisible step.
+LOCK_DIR="$STATUS_DIR/.sidebar-collector.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
     old_pid=$(cat "$PID_FILE" 2>/dev/null)
     if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
         exit 0
     fi
+    # Lock exists but its owner is gone -- killed, crashed, or the machine
+    # rebooted with the lock on disk. Reclaim it; if another process wins that
+    # same race, defer to it rather than running a second collector.
+    rm -rf "$LOCK_DIR"
+    mkdir "$LOCK_DIR" 2>/dev/null || exit 0
 fi
 echo $$ > "$PID_FILE"
-trap 'rm -f "$PID_FILE"' EXIT
+trap 'rm -rf "$LOCK_DIR"; rm -f "$PID_FILE"' EXIT
 
 # Persistent cross-cycle state (survives across collect_data calls)
 declare -A KNOWN_AGENTS=()
