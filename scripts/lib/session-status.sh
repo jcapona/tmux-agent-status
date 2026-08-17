@@ -22,6 +22,7 @@ SIDEBAR_CLIENT_DIR="$STATUS_DIR/sidebar-clients"
 STATUS_LINE_CACHE_FILE="$STATUS_DIR/.status-line"
 STATUS_LINE_COUNTS_FILE="$STATUS_DIR/.status-line-counts"
 REFRESH_FILE="$STATUS_DIR/.sidebar-refresh"
+VISIBLE_FILE="$STATUS_DIR/.visible-panes"
 mkdir -p "$STATUS_DIR" "$PARKED_DIR" "$WAIT_DIR" "$PANE_DIR" "$SIDEBAR_CLIENT_DIR"
 [ -f "$REFRESH_FILE" ] || : > "$REFRESH_FILE"
 

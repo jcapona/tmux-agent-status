@@ -44,7 +44,7 @@ handle_refresh_signal() {
 }
 
 handle_animation_signal() {
-    (( _HAS_WORKING )) && ANIMATE_TICK=1
+    (( _HAS_WORKING && ${_SELF_VISIBLE:-1} )) && ANIMATE_TICK=1
 }
 
 # cleanup runs via the EXIT trap; the signal traps must actually exit —
@@ -1183,17 +1183,36 @@ while true; do
     fi
     (( NEEDS_COLLECT )) && _COLLECT_TICK=0
 
+    # Only a sidebar that is actually on screen needs to animate. _HAS_WORKING
+    # is global -- one working agent anywhere put every renderer into a 4 Hz
+    # loop, including the ones in windows nobody is looking at. With a sidebar
+    # per session that was N spinners drawn into ptys that are not displayed.
+    #
+    # Visibility comes from a file the collector already computes during its
+    # pane enumeration, so this costs a small read rather than a tmux call.
+    # Read and match without forking: $(<file) is a builtin, and the newline
+    # guards make it an exact line match so %1 does not match %12. A grep here
+    # would fork once per loop iteration in every renderer, which is the kind
+    # of cost this check exists to remove.
+    _SELF_VISIBLE=1
+    if [[ -n "${SELF_PANE:-}" && -r "$VISIBLE_FILE" ]]; then
+        local _vis
+        _vis=$'\n'"$(<"$VISIBLE_FILE")"$'\n'
+        [[ "$_vis" == *$'\n'"$SELF_PANE"$'\n'* ]] && _SELF_VISIBLE=1 || _SELF_VISIBLE=0
+    fi
+
     local_read_timeout=1
-    (( _HAS_WORKING )) && local_read_timeout=0.25
+    (( _HAS_WORKING && _SELF_VISIBLE )) && local_read_timeout=0.25
+    (( _SELF_VISIBLE )) || local_read_timeout=2
 
     (( _COLLECT_TICK++ ))
     local_poll_ticks=1
-    (( _HAS_WORKING )) && local_poll_ticks=4
+    (( _HAS_WORKING && _SELF_VISIBLE )) && local_poll_ticks=4
     if (( _COLLECT_TICK >= local_poll_ticks )); then
         NEEDS_COLLECT=1
         _COLLECT_TICK=0
     fi
-    (( _HAS_WORKING )) && ANIMATE_TICK=1
+    (( _HAS_WORKING && ${_SELF_VISIBLE:-1} )) && ANIMATE_TICK=1
 
     if read -rsn1 -t "$local_read_timeout" key; then
         NEEDS_RENDER=1
