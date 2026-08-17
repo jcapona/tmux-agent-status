@@ -6,7 +6,7 @@ Claude Code and Codex CLI are both integrated through hooks, so their states com
 
 ## Features
 
-- Persistent sidebar in every window of every session (`@agent-sidebar-per-window`, on by default)
+- Persistent sidebar per session, or in every window with `@agent-sidebar-per-window`
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
@@ -166,9 +166,9 @@ set -g @agent-sidebar-width "42"
 
 # Every window gets its own sidebar (default). A sidebar is a pane, so it lives
 # in exactly one window -- one per session means it vanishes the moment you
-# switch windows. Set "off" for one per session instead, which costs one
-# renderer process rather than one per window.
-set -g @agent-sidebar-per-window "on"      # on | off
+# switch windows. Off (the default) runs one renderer per session. Set "on"
+# for one sidebar per window, which costs a renderer process per window.
+set -g @agent-sidebar-per-window "off"     # off | on
 
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by
