@@ -8,7 +8,14 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
-trap 'pkill -f "$TMP_DIR" 2>/dev/null; rm -rf "$TMP_DIR"' EXIT
+# Collectors run as "$REPO_DIR/scripts/sidebar-collector.sh", so a pkill on
+# TMP_DIR never matched them and every run leaked its collectors into the next
+# one's process count -- which looked exactly like a flaky singleton guard.
+cleanup() {
+    pkill -f "$REPO_DIR/scripts/sidebar-collector.sh" 2>/dev/null || true
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
 
 export HOME="$TMP_DIR/home"
 FAKE_BIN="$TMP_DIR/bin"
@@ -38,6 +45,9 @@ check() {
 
 running() { pgrep -f "$REPO_DIR/scripts/sidebar-collector.sh" | wc -l | tr -d ' '; }
 
+pkill -f "$REPO_DIR/scripts/sidebar-collector.sh" 2>/dev/null || true
+sleep 1
+
 echo "collector-singleton"
 
 # ── ten genuinely simultaneous starts must yield one collector ─────
@@ -65,7 +75,6 @@ check "a later start does not add a second" "1" "$(running)"
 # ── a stale lock (owner gone) is reclaimed, not honoured forever ───
 pkill -f "$REPO_DIR/scripts/sidebar-collector.sh" 2>/dev/null || true
 sleep 1
-mkdir -p "$STATUS_DIR/.sidebar-collector.lock"
 echo "999999" > "$STATUS_DIR/.sidebar-collector.pid"   # a PID that cannot be alive
 "$REPO_DIR/scripts/sidebar-collector.sh" >/dev/null 2>&1 &
 sleep 3
@@ -74,8 +83,8 @@ check "stale lock is reclaimed"             "1" "$(running)"
 # ── exiting releases the lock so the next start succeeds ───────────
 pkill -f "$REPO_DIR/scripts/sidebar-collector.sh" 2>/dev/null || true
 sleep 1
-check "lock released on exit"               "absent" \
-      "$([ -d "$STATUS_DIR/.sidebar-collector.lock" ] && echo present || echo absent)"
+check "claim released on exit"              "absent" \
+      "$([ -f "$STATUS_DIR/.sidebar-collector.pid" ] && echo present || echo absent)"
 
 if [ "$FAILURES" -ne 0 ]; then
     printf '\n%d check(s) failed\n' "$FAILURES"
