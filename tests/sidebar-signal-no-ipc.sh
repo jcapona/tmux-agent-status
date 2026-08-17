@@ -43,7 +43,13 @@ printf '%s\n' "$listener_pid" > "$STATUS_DIR/sidebar-clients/%1.pid"
 sleep 0.2
 
 # Call signal_sidebar_clients 10 times in quick succession.
-PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" bash -c '
+# The libs need Bash 4+; macOS /bin/bash is 3.2, so pick the same interpreter
+# the plugin's own require-bash4 guard would, rather than whatever is on PATH.
+BASH_BIN="$(command -v bash)"
+for c in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [ -x "$c" ] && BASH_BIN="$c" && break
+done
+PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" "$BASH_BIN" -c '
     source "'"${REPO_DIR}"'/scripts/lib/session-status.sh"
     source "'"${REPO_DIR}"'/scripts/lib/sidebar-clients.sh"
     for i in $(seq 1 10); do
