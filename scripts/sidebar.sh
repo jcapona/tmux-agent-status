@@ -1194,9 +1194,11 @@ while true; do
     # guards make it an exact line match so %1 does not match %12. A grep here
     # would fork once per loop iteration in every renderer, which is the kind
     # of cost this check exists to remove.
+    # NOTE: this runs in the main loop, not a function -- `local` here is a
+    # runtime error on every iteration, which silently defeats the check and
+    # prints into the sidebar's own pane.
     _SELF_VISIBLE=1
     if [[ -n "${SELF_PANE:-}" && -r "$VISIBLE_FILE" ]]; then
-        local _vis
         _vis=$'\n'"$(<"$VISIBLE_FILE")"$'\n'
         [[ "$_vis" == *$'\n'"$SELF_PANE"$'\n'* ]] && _SELF_VISIBLE=1 || _SELF_VISIBLE=0
     fi
@@ -1205,9 +1207,21 @@ while true; do
     (( _HAS_WORKING && _SELF_VISIBLE )) && local_read_timeout=0.25
     (( _SELF_VISIBLE )) || local_read_timeout=2
 
+    # Re-parsing the cache on a timer is redundant: the collector already sends
+    # USR1 whenever state actually changes, and handle_refresh_signal sets
+    # NEEDS_COLLECT. An off-screen sidebar polling every wake meant N renderers
+    # parsing the cache continuously to discover nothing had changed.
+    #
+    # Visible sidebars keep a short cadence so the spinner and any missed
+    # signal stay responsive. Off-screen ones fall back to a slow sweep, which
+    # exists only to recover from a lost signal, not as the normal path.
     (( _COLLECT_TICK++ ))
-    local_poll_ticks=1
-    (( _HAS_WORKING && _SELF_VISIBLE )) && local_poll_ticks=4
+    if (( _SELF_VISIBLE )); then
+        local_poll_ticks=1
+        (( _HAS_WORKING )) && local_poll_ticks=4
+    else
+        local_poll_ticks=15      # ~30s at the 2s off-screen wake
+    fi
     if (( _COLLECT_TICK >= local_poll_ticks )); then
         NEEDS_COLLECT=1
         _COLLECT_TICK=0
