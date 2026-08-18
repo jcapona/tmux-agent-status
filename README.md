@@ -6,7 +6,7 @@ Claude Code and Codex CLI are both integrated through hooks, so their states com
 
 ## Features
 
-- Persistent sidebar in every window of every session (`@agent-sidebar-per-window`, on by default)
+- Persistent sidebar per session, or in every window with `@agent-sidebar-per-window`
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
@@ -70,11 +70,12 @@ See [HOOKS.md](HOOKS.md) for what that writes, per-agent details, and manual set
 
 ## Custom Agent Integration
 
-Integrate any AI coding tool with either of these approaches:
+Integrate any AI coding tool with any of these approaches:
 
 1. Write `working`, `done`, or `wait` to `~/.cache/tmux-agent-status/<session>.status`
 2. For pane-level parking or per-pane state, write to `~/.cache/tmux-agent-status/panes/<session>_<pane>.status` and `~/.cache/tmux-agent-status/parked/<session>_<pane>.parked`
-3. Extend the collector scan in [`scripts/lib/collect.sh`](scripts/lib/collect.sh) if you want automatic process-based tracking
+3. Send a one-line event to the Unix socket at `~/.cache/tmux-agent-status/agent-daemon.sock` (if available): `echo "claude mysession %3 working" | nc -U ~/.cache/tmux-agent-status/agent-daemon.sock`. The protocol is `<agent> <session> <pane> <state>` (use `-` for pane on session-level events). This is a fast path — it writes the same status files internally, so the file-based path is always available as a fallback.
+4. Extend the collector scan in [`scripts/lib/collect.sh`](scripts/lib/collect.sh) if you want automatic process-based tracking
 
 ## Usage
 
@@ -166,9 +167,11 @@ set -g @agent-sidebar-width "42"
 
 # Every window gets its own sidebar (default). A sidebar is a pane, so it lives
 # in exactly one window -- one per session means it vanishes the moment you
-# switch windows. Set "off" for one per session instead, which costs one
-# renderer process rather than one per window.
-set -g @agent-sidebar-per-window "on"      # on | off
+# switch windows. Off (the default) runs one renderer per session with no
+# proxies. With per-window on, one window per session runs the full renderer
+# and the others get a lightweight display proxy that reads the renderer's
+# output from a shared file.
+set -g @agent-sidebar-per-window "off"     # off | on
 
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by
@@ -282,6 +285,9 @@ Works with cloud VMs, GPU boxes, and any SSH-accessible tmux host.
 - Claude Code support is hook-based
 - Codex CLI support is hook-based
 - Custom agents can be file-based or process-detected
+- The collector uses filesystem event notification (`fswatch` or `inotifywait`) when available, so it does zero work when no status files change. It falls back to 1s polling when neither is installed. A 30s liveness sweep catches process exits that don't touch files and polls remote SSH session status.
+- The collector is the single always-running process. The previous three-process stack (collector + smart-monitor + daemon-monitor) is gone — the collector handles SSH status polling in its own liveness sweep.
+- Only one sidebar renderer runs per session; other windows get a lightweight display proxy that reads the renderer's output from a shared file
 - The sidebar is the main live view; the `fzf` switcher is the quick jump and close tool
 
 ## Credits

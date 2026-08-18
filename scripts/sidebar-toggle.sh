@@ -17,6 +17,7 @@
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIDEBAR_TITLE="agent-sidebar"
+STATUS_DIR="$HOME/.cache/tmux-agent-status"
 
 MODE="show"
 if [ "${1:-}" = "--toggle" ]; then
@@ -28,6 +29,34 @@ TARGET="${1:-}"
 # Read configured width.
 width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
 [ -z "$width" ] && width=42
+
+# Read per-window setting: when on, only the first window in a session gets
+# the full renderer; subsequent windows get a lightweight display proxy.
+case "$(tmux show-option -gqv "@agent-sidebar-per-window")" in
+    0|off|false|no) sidebar_per_window=0 ;;
+    *)              sidebar_per_window=1 ;;
+esac
+
+# Resolve the session name for the target window.
+if [ -n "$TARGET" ]; then
+    session_name=$(tmux display-message -t "$TARGET" -p '#{session_name}' 2>/dev/null || echo "")
+else
+    session_name=$(tmux display-message -p '#{session_name}' 2>/dev/null || echo "")
+fi
+
+# Check whether a renderer is already running for this session.
+has_renderer=0
+if [ -n "$session_name" ] && [ "$sidebar_per_window" = "1" ]; then
+    renderer_pid_file="$STATUS_DIR/.sidebar-renderer.$session_name.pid"
+    if [ -f "$renderer_pid_file" ]; then
+        renderer_pid=$(cat "$renderer_pid_file" 2>/dev/null || echo "")
+        if [ -n "$renderer_pid" ] && kill -0 "$renderer_pid" 2>/dev/null; then
+            has_renderer=1
+        else
+            rm -f "$renderer_pid_file"
+        fi
+    fi
+fi
 
 # Build -t flag for list-panes when a target is given.
 target_flag=()
@@ -69,10 +98,19 @@ if [ -n "$existing" ]; then
 else
     file_sidebar=$(find_file_sidebar)
 
+    # When a renderer is already running for this session, create a display
+    # proxy instead of a second renderer. The proxy reads the renderer's
+    # output from a shared file and costs negligible CPU.
+    if [ "$has_renderer" = "1" ]; then
+        sidebar_cmd="$CURRENT_DIR/sidebar-display-proxy.sh"
+    else
+        sidebar_cmd="$CURRENT_DIR/sidebar.sh"
+    fi
+
     if [ -n "$file_sidebar" ]; then
         # File manager is open — split below it (inherits the same width).
         new_pane=$(tmux split-window -v -t "$file_sidebar" \
-            -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
+            -PF '#{pane_id}' "$sidebar_cmd")
     else
         # No file manager — create a left-side split spanning the whole window.
         #
@@ -84,7 +122,7 @@ else
         # and subsequent splits divide only the remaining area.
         leftmost=$(tmux list-panes "${target_flag[@]}" -F '#{pane_left} #{pane_id}' | sort -n | head -1 | awk '{print $2}')
         new_pane=$(tmux split-window -fhb -l "$width" -t "$leftmost" \
-            -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
+            -PF '#{pane_id}' "$sidebar_cmd")
     fi
 
     # Tag the pane so we can find it later.

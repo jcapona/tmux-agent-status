@@ -429,9 +429,6 @@ parse_args() {
 
 # ─── Full reset (shared with sidebar.sh) ──────────────────────────
 perform_full_reset() {
-    pkill -f "daemon-monitor.sh" 2>/dev/null
-    pkill -f "smart-monitor.sh" 2>/dev/null
-
     # Clear PID files
     find "$STATUS_DIR" -type f -name "*.pid" -delete 2>/dev/null
 
@@ -475,10 +472,8 @@ perform_full_reset() {
         fi
     done
 
-    # Restart daemons
-    "$SCRIPT_DIR/../smart-monitor.sh" stop >/dev/null 2>&1
-    "$SCRIPT_DIR/../smart-monitor.sh" start >/dev/null 2>&1
-    "$SCRIPT_DIR/daemon-monitor.sh" </dev/null >/dev/null 2>&1 &
+    # Restart the collector daemon (self-supervising singleton).
+    "$SCRIPT_DIR/sidebar-collector.sh" </dev/null >/dev/null 2>&1 &
     disown
 }
 

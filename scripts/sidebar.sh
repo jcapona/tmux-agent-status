@@ -32,6 +32,7 @@ esac
 # ─── Terminal setup ───────────────────────────────────────────────
 cleanup() {
     [ -n "${SELF_PANE:-}" ] && unregister_sidebar_client "$SELF_PANE"
+    [ -f "${RENDERER_PID_FILE:-}" ] && rm -f "$RENDERER_PID_FILE"
     printf '\033[?1000l\033[?1006l' 2>/dev/null  # disable mouse
     tput cnorm 2>/dev/null
     stty echo 2>/dev/null
@@ -44,6 +45,10 @@ handle_refresh_signal() {
 }
 
 handle_animation_signal() {
+    # Kept for backward compatibility -- the collector no longer sends USR2.
+    # Animation is driven locally by the main loop's read-timeout timer
+    # (0.25s when _HAS_WORKING). The visibility gate is retained so a stray
+    # USR2 from an older collector still cannot animate an off-screen pane.
     (( _HAS_WORKING && ${_SELF_VISIBLE:-1} )) && ANIMATE_TICK=1
 }
 
@@ -79,6 +84,15 @@ if (( ! PREVIEW_MODE )); then
     if [ -n "$SELF_PANE" ]; then
         tmux select-pane -t "$SELF_PANE" -T "$SIDEBAR_TITLE" >/dev/null 2>&1 || true
         register_sidebar_client "$SELF_PANE" >/dev/null 2>&1 || true
+    fi
+
+    # Register as the session's renderer so sidebar-toggle.sh knows to
+    # create display proxies (not full renderers) in other windows.
+    SIDEBAR_SESSION=$(tmux display-message -t "${SELF_PANE:-}" -p '#{session_name}' 2>/dev/null || echo "")
+    if [ -n "$SIDEBAR_SESSION" ]; then
+        RENDER_FILE="$STATUS_DIR/.sidebar-render.$SIDEBAR_SESSION"
+        RENDERER_PID_FILE="$STATUS_DIR/.sidebar-renderer.$SIDEBAR_SESSION.pid"
+        echo $$ > "$RENDERER_PID_FILE"
     fi
 fi
 
@@ -904,6 +918,19 @@ render() {
 
     # Flush entire frame at once (no flicker)
     printf '\033[H%b' "$buf"
+
+    # Write the same frame to the shared render file so display proxies
+    # in other windows of this session can replay it without running
+    # their own renderer. Temp+rename for atomicity.
+    if [[ -n "${RENDER_FILE:-}" ]]; then
+        # Per-process temp name. One renderer per session is the intent, but a
+        # fixed .tmp turns any violation of that into visible error spam: every
+        # loser of the race prints "mv: ... No such file or directory" into its
+        # own pane, because a sidebar pane's stdout is the pane. $$ makes the
+        # write correct regardless of how many renderers exist.
+        local render_tmp="${RENDER_FILE}.tmp.$$"
+        printf '\033[H%b' "$buf" > "$render_tmp" && mv -f "$render_tmp" "$RENDER_FILE"
+    fi
 
     # ── Preview panel (popup mode only) ──
     if (( PREVIEW_MODE && SEL_COUNT > 0 )); then

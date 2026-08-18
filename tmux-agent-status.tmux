@@ -126,7 +126,7 @@ fi
 # tmux has no idempotent set-hook: `-ga` appends unconditionally, so every
 # config reload stacks another copy. Reloading often leaves dozens of duplicates
 # (observed: 84 entries on session-created after ~28 reloads, which fired
-# daemon-monitor.sh 28 times per new session). Plain `-g` is not an option --
+# the old monitor 28 times per new session). Plain `-g` is not an option --
 # it replaces the whole array and would silently delete hooks the user or other
 # plugins registered on the same event.
 #
@@ -141,9 +141,13 @@ add_hook_once() {
     fi
 }
 
-# Set up daemon monitor to ensure smart-monitor is always running
-# Start daemon monitor on session created
-add_hook_once session-created "run-shell '$CURRENT_DIR/scripts/daemon-monitor.sh'"
+# Set up daemon monitor to ensure the collector is always running.
+# The collector is self-supervising: it runs as a singleton (PID-file guard)
+# and self-exits when tmux has no sessions. We start it on session-created
+# in case it was killed or tmux was restarted. The old two-process monitor
+# smart-monitor two-process stack is gone — the collector handles SSH
+# status polling in its own 30s liveness sweep.
+add_hook_once session-created "run-shell -b '$CURRENT_DIR/scripts/sidebar-collector.sh'"
 
 # Sidebars are event-driven: wake them when tmux client focus changes so they
 # can refresh ACTIVE markers without polling in the pane process.
@@ -167,12 +171,12 @@ add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-si
 # ── Sidebar placement (@agent-sidebar-per-window) ─────────────────
 # A sidebar is a pane, and a pane belongs to exactly one window, so "a sidebar
 # in every session" only ever means "in one window of it" -- switch windows and
-# it is gone. That is not what a persistent sidebar should mean, so every window
-# gets its own by default. Set this to "off" for one per session instead, which
-# costs one process rather than one per window.
+# it is gone. Covering every window is therefore one renderer process per
+# window, which at 40 windows is the cost this architecture work exists to
+# remove. Off by default; set "on" to put one in every window.
 case "$(tmux show-option -gqv "@agent-sidebar-per-window")" in
-    0|off|false|no) sidebar_per_window=0 ;;
-    *)              sidebar_per_window=1 ;;
+    1|on|true|yes) sidebar_per_window=1 ;;
+    *)             sidebar_per_window=0 ;;
 esac
 
 # Auto-create sidebar in new sessions (small delay so the session is ready).
@@ -224,7 +228,8 @@ fi
 
 # Also start it now if tmux is already running
 if tmux list-sessions >/dev/null 2>&1; then
-    "$CURRENT_DIR/scripts/daemon-monitor.sh" >/dev/null 2>&1
+    # Ensure the collector is running (it self-exits if tmux has no sessions).
+    "$CURRENT_DIR/scripts/sidebar-collector.sh" >/dev/null 2>&1 &
 
     # Backfill anything that has no sidebar yet: every window when per-window
     # is on, otherwise one per session as before. Read line by line so session
