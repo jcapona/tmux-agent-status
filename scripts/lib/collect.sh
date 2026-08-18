@@ -127,12 +127,20 @@ collect_data() {
     declare -A pane_to_session   # pane_pid → session
     declare -A pane_to_id        # pane_pid → pane_id (e.g. %5)
     declare -A pane_to_window    # pane_id → window_index
+    declare -A VISIBLE_PANES=()  # pane_id → 1 when on screen for some client
     declare -A window_names      # session:window_index → window_name
     local all_pane_pids=""
 
     local _tab=$'\t'
-    while IFS=$'\t' read -r sname pane_id pcwd ppid win_idx win_name; do
+    while IFS=$'\t' read -r sname pane_id pcwd ppid win_idx win_name win_active sess_attached; do
         [ -z "$sname" ] && continue
+
+        # A pane is visible only if its window is the current one in its
+        # session and that session has a client attached. Anything else is
+        # rendering into a pty nobody is displaying.
+        if [ "${win_active:-0}" = "1" ] && [ "${sess_attached:-0}" != "0" ]; then
+            VISIBLE_PANES[$pane_id]=1
+        fi
 
         [[ -z "${sess_cwd[$sname]:-}" ]] && sess_cwd[$sname]="$pcwd"
         pane_to_session[$ppid]="$sname"
@@ -180,7 +188,7 @@ collect_data() {
         sess_state[$sname]="$state"
         sess_extra[$sname]="$extra"
         sess_ssh[$sname]="$is_ssh"
-    done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}" 2>/dev/null)
+    done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}${_tab}#{window_active}${_tab}#{session_attached}" 2>/dev/null)
 
     # ── 3. Worktree detection ────────────────────────────────────
     declare -A worktree_parent worktree_children
@@ -712,4 +720,12 @@ collect_data() {
         pid_id="${bname##*_}"
         [[ -z "${LIVE_PANES[$pid_id]:-}" ]] && rm -f "$paf"
     done
+
+    # Publish which sidebar panes are on screen. Renderers read this instead of
+    # asking tmux, so deciding whether to animate costs a file read rather than
+    # an IPC round trip per renderer.
+    {
+        local vp
+        for vp in "${!VISIBLE_PANES[@]}"; do printf '%s\n' "$vp"; done
+    } > "$VISIBLE_FILE.tmp.$$" 2>/dev/null && mv -f "$VISIBLE_FILE.tmp.$$" "$VISIBLE_FILE" 2>/dev/null
 }

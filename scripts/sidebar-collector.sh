@@ -18,14 +18,48 @@ if [[ "${1:-}" == "--once" ]]; then
     RUN_ONCE=1
 fi
 
-# Singleton guard
-if [ -f "$PID_FILE" ]; then
-    old_pid=$(cat "$PID_FILE" 2>/dev/null)
-    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+# Singleton guard.
+#
+# The previous check-then-write test let two collectors start together: each
+# read a missing or stale PID file, each concluded no collector was running,
+# and each wrote its own PID. The second overwrote the first, so the first's
+# EXIT trap then deleted a PID file naming the second. Observed repeatedly as
+# two live collectors after a config reload, doubling the daemon's cost.
+#
+# mkdir is atomic: exactly one process can create a given directory, so the
+# claim and the check are a single indivisible step.
+# Claim ownership with a hard link.
+#
+# Every two-step claim has a window: mkdir-then-write-PID, or create-then-write,
+# both leave an instant where the lock exists but names no owner. A loser that
+# looks during that instant sees an ownerless lock, concludes the owner is dead,
+# and takes over -- which is how ten simultaneous starts produced two, and then
+# nine, collectors while the guard "looked" atomic.
+#
+# ln is atomic and fails if the target exists, and the file it links already
+# contains our PID. The lock therefore never exists without naming its owner.
+_claim() {
+    local staging="$PID_FILE.$$"
+    echo $$ > "$staging" || return 1
+    if ln "$staging" "$PID_FILE" 2>/dev/null; then
+        rm -f "$staging"
+        return 0
+    fi
+    rm -f "$staging"
+    return 1
+}
+
+if ! _claim; then
+    owner=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
         exit 0
     fi
+    # Owner is gone: killed, crashed, or left behind by a reboot. Clear the
+    # stale claim and try once; losing that race means someone else got there
+    # first, which is the outcome we want anyway.
+    rm -f "$PID_FILE"
+    _claim || exit 0
 fi
-echo $$ > "$PID_FILE"
 trap 'rm -f "$PID_FILE"' EXIT
 
 # Persistent cross-cycle state (survives across collect_data calls)

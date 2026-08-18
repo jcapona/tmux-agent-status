@@ -44,7 +44,7 @@ handle_refresh_signal() {
 }
 
 handle_animation_signal() {
-    (( _HAS_WORKING )) && ANIMATE_TICK=1
+    (( _HAS_WORKING && ${_SELF_VISIBLE:-1} )) && ANIMATE_TICK=1
 }
 
 # cleanup runs via the EXIT trap; the signal traps must actually exit —
@@ -1183,17 +1183,50 @@ while true; do
     fi
     (( NEEDS_COLLECT )) && _COLLECT_TICK=0
 
-    local_read_timeout=1
-    (( _HAS_WORKING )) && local_read_timeout=0.25
+    # Only a sidebar that is actually on screen needs to animate. _HAS_WORKING
+    # is global -- one working agent anywhere put every renderer into a 4 Hz
+    # loop, including the ones in windows nobody is looking at. With a sidebar
+    # per session that was N spinners drawn into ptys that are not displayed.
+    #
+    # Visibility comes from a file the collector already computes during its
+    # pane enumeration, so this costs a small read rather than a tmux call.
+    # Read and match without forking: $(<file) is a builtin, and the newline
+    # guards make it an exact line match so %1 does not match %12. A grep here
+    # would fork once per loop iteration in every renderer, which is the kind
+    # of cost this check exists to remove.
+    # NOTE: this runs in the main loop, not a function -- `local` here is a
+    # runtime error on every iteration, which silently defeats the check and
+    # prints into the sidebar's own pane.
+    _SELF_VISIBLE=1
+    if [[ -n "${SELF_PANE:-}" && -r "$VISIBLE_FILE" ]]; then
+        _vis=$'\n'"$(<"$VISIBLE_FILE")"$'\n'
+        [[ "$_vis" == *$'\n'"$SELF_PANE"$'\n'* ]] && _SELF_VISIBLE=1 || _SELF_VISIBLE=0
+    fi
 
+    local_read_timeout=1
+    (( _HAS_WORKING && _SELF_VISIBLE )) && local_read_timeout=0.25
+    (( _SELF_VISIBLE )) || local_read_timeout=2
+
+    # Re-parsing the cache on a timer is redundant: the collector already sends
+    # USR1 whenever state actually changes, and handle_refresh_signal sets
+    # NEEDS_COLLECT. An off-screen sidebar polling every wake meant N renderers
+    # parsing the cache continuously to discover nothing had changed.
+    #
+    # Visible sidebars keep a short cadence so the spinner and any missed
+    # signal stay responsive. Off-screen ones fall back to a slow sweep, which
+    # exists only to recover from a lost signal, not as the normal path.
     (( _COLLECT_TICK++ ))
-    local_poll_ticks=1
-    (( _HAS_WORKING )) && local_poll_ticks=4
+    if (( _SELF_VISIBLE )); then
+        local_poll_ticks=1
+        (( _HAS_WORKING )) && local_poll_ticks=4
+    else
+        local_poll_ticks=15      # ~30s at the 2s off-screen wake
+    fi
     if (( _COLLECT_TICK >= local_poll_ticks )); then
         NEEDS_COLLECT=1
         _COLLECT_TICK=0
     fi
-    (( _HAS_WORKING )) && ANIMATE_TICK=1
+    (( _HAS_WORKING && ${_SELF_VISIBLE:-1} )) && ANIMATE_TICK=1
 
     if read -rsn1 -t "$local_read_timeout" key; then
         NEEDS_RENDER=1

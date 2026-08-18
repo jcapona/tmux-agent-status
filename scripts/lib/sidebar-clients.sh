@@ -21,23 +21,43 @@ unregister_sidebar_client() {
     rm -f "$SIDEBAR_CLIENT_DIR/${pane_id}.pid"
 }
 
+# ─── Pane info cache ─────────────────────────────────────────────
+# signal_sidebar_clients used to call tmux list-panes -a on every invocation
+# to validate which panes are still sidebars. With N sidebar clients that is
+# N IPC calls per signal, and the collector signals on every state change.
+# The cache refreshes at most every 5 seconds; between refreshes the signal
+# path is just kill -s over PID files — zero tmux IPC.
+_PANE_CACHE_TS=0
+declare -A _PANE_CACHE_TITLES=()
+declare -A _PANE_CACHE_ACTIVE=()
+
+_refresh_pane_cache() {
+    local now
+    printf -v now '%(%s)T' -1
+    (( now - _PANE_CACHE_TS < 5 )) && return 0
+    _PANE_CACHE_TS=$now
+    _PANE_CACHE_TITLES=()
+    _PANE_CACHE_ACTIVE=()
+
+    local pane_id pane_title pane_is_active
+    while IFS=$'\t' read -r pane_id pane_title pane_is_active; do
+        [ -n "$pane_id" ] || continue
+        _PANE_CACHE_TITLES[$pane_id]="$pane_title"
+        _PANE_CACHE_ACTIVE[$pane_id]="${pane_is_active:-0}"
+    done < <(tmux list-panes -a -F '#{pane_id}'$'\t''#{pane_title}'$'\t''#{pane_active}' 2>/dev/null)
+}
+
 signal_sidebar_clients() {
     local signal_name="$1"
     local scope="${2:-all}"
     local pane_file pane_id pid
-    local -A pane_titles=()
-    local -A pane_active=()
 
     for pane_file in "$SIDEBAR_CLIENT_DIR/"*.pid; do
         [ -f "$pane_file" ] || return 0
         break
     done
 
-    while IFS=$'\t' read -r pane_id pane_title pane_is_active; do
-        [ -n "$pane_id" ] || continue
-        pane_titles[$pane_id]="$pane_title"
-        pane_active[$pane_id]="${pane_is_active:-0}"
-    done < <(tmux list-panes -a -F '#{pane_id}'$'\t''#{pane_title}'$'\t''#{pane_active}' 2>/dev/null)
+    _refresh_pane_cache
 
     for pane_file in "$SIDEBAR_CLIENT_DIR/"*.pid; do
         [ -f "$pane_file" ] || continue
@@ -50,12 +70,12 @@ signal_sidebar_clients() {
             continue
         fi
 
-        if [ "${pane_titles[$pane_id]:-}" != "$SIDEBAR_TITLE" ]; then
+        if [ "${_PANE_CACHE_TITLES[$pane_id]:-}" != "$SIDEBAR_TITLE" ]; then
             rm -f "$pane_file"
             continue
         fi
 
-        if [ "$scope" = "active" ] && [ "${pane_active[$pane_id]:-0}" != "1" ]; then
+        if [ "$scope" = "active" ] && [ "${_PANE_CACHE_ACTIVE[$pane_id]:-0}" != "1" ]; then
             continue
         fi
 
