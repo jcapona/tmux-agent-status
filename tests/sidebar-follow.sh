@@ -82,13 +82,13 @@ run_follow "s1:2"
 check "same-window jump is a no-op"             "$BEFORE" "$(sidebar_win)"
 
 # ── across sessions ────────────────────────────────────────────────
-# A session with no sidebar of its own gets nothing: dragging s1's sidebar into
-# s2 would leave s1 without one. Following is within a session.
-HELD=$(sidebar_win_of "$SIDEBAR_PANE")
+# There is one sidebar in the whole server, so it crosses sessions too.
 run_follow "s2:0"
-check "a foreign session is not raided"         "$HELD" "$(sidebar_win_of "$SIDEBAR_PANE")"
+check "follows across sessions"                 "$(win_of s2:0)" "$(sidebar_win_of "$SIDEBAR_PANE")"
 check "  process still alive"                   "$ORIG_PID" \
       "$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_pid}')"
+check "  and there is still only one"           "1" \
+      "$(tm list-panes -a -F '#{pane_title}' | grep -cx 'agent-sidebar')"
 
 # ── a zoomed destination is unzoomed rather than swallowing the pane ─
 tm select-window -t s1:1
@@ -150,23 +150,17 @@ check "width is the configured one"             "30" "$W1"
 check "  and does not drift over moves"         "30|30" "$W2|$W3"
 tm set-option -g @agent-sidebar-width 42
 
-# ── another session's sidebar is never dragged in ──────────────────
-# One sidebar is auto-created per session, so "find the sidebar" must mean "the
-# one in this session". Scanning every pane and taking the first match hauled a
-# foreign sidebar into the window being switched to, width and all.
+# ── one sidebar, wherever you go ───────────────────────────────────
+# The whole point of follow mode: exactly one exists, and it is always in the
+# window you just moved to. Never two, never left behind.
 tm set-option -g @agent-sidebar-follow on
-# put our sidebar back in s1, and give s2 its own
-run_follow "s1:0"
-S2BAR=$(tm split-window -fhb -l 20 -t s2:0 -PF '#{pane_id}' "sleep 600")
-tm select-pane -t "$S2BAR" -T "agent-sidebar"
-tm new-window -d -t s2 -n s2w2
-S1_HOME=$(sidebar_win_of "$SIDEBAR_PANE")
-
-run_follow "s2:1"
-check "s2's own sidebar is the one that moved"  "$(win_of s2:1)" "$(sidebar_win_of "$S2BAR")"
-check "  s1's sidebar was left alone"           "$S1_HOME" "$(sidebar_win_of "$SIDEBAR_PANE")"
-check "  at the configured width"              "42" \
-      "$(tm display-message -t "$S2BAR" -p '#{pane_width}')"
+for w in s1:0 s2:0 s1:2 s1:1 s2:0; do
+    run_follow "$w"
+    n=$(tm list-panes -a -F '#{pane_title}' | grep -cx 'agent-sidebar')
+    [ "$n" = "1" ] || break
+done
+check "never more than one sidebar exists"      "1" "$n"
+check "  and it ends where it was sent"         "$(win_of s2:0)" "$(sidebar_win_of "$SIDEBAR_PANE")"
 
 # ── off again: stops moving ────────────────────────────────────────
 tm set-option -g @agent-sidebar-follow off

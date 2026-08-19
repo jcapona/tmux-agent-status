@@ -191,7 +191,19 @@ esac
 # tmux-resurrect restores and how most scripted sessions start) is not in the
 # new session at all -- so the sidebar landed in whatever window happened to be
 # focused, and the new session silently got none.
-add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
+# Follow mode owns placement: there is exactly one sidebar and it moves to
+# wherever you are. Auto-creating one per session would defeat that -- you would
+# get N sidebars, each shuffling within its own session, which is what
+# per-session already does. So the auto-create is skipped when follow is on; the
+# single sidebar is opened once, by hand, and then follows.
+case "$(tmux show-option -gqv "@agent-sidebar-follow")" in
+    1|on|true|yes) sidebar_follow=1 ;;
+    *)             sidebar_follow=0 ;;
+esac
+
+if [ "$sidebar_follow" -eq 0 ]; then
+    add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
+fi
 
 # after-new-window does not fire for a session's first window, so this covers
 # windows 2..n and the session-created hook above covers the first.

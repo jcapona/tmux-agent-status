@@ -256,22 +256,20 @@ _window_has_sidebar() {
     tmux list-panes -t "$1" -F '#{pane_title}' 2>/dev/null | grep -qxF "$title"
 }
 
-# "<pane_id> <window_id>" for the sidebar belonging to a given session.
+# "<pane_id> <window_id>" for the single sidebar, wherever it currently lives.
 #
-# Scoped to the session on purpose. Scanning every pane and taking the first
-# match picks an arbitrary sidebar -- with one auto-created per session that is
-# some other session's, which then gets dragged into the window you switched to,
-# carrying its width with it. The sidebar that should follow you is the one in
-# the session you are moving within.
+# Global on purpose: under follow mode the per-session auto-create is disabled,
+# so exactly one sidebar exists and it follows you across sessions as well as
+# windows. (While several exist -- a config reload before the old ones are
+# closed -- the destination-occupied guard keeps them from stacking.)
 _sidebar_pane_location() {
-    local scope="$1"
     local title="${SIDEBAR_TITLE:-agent-sidebar}" pid wid ptitle
     while read -r pid wid ptitle; do
         if [ "$ptitle" = "$title" ]; then
             printf '%s %s' "$pid" "$wid"
             return 0
         fi
-    done < <(tmux list-panes -s -t "$scope" -F '#{pane_id} #{window_id} #{pane_title}' 2>/dev/null)
+    done < <(tmux list-panes -a -F '#{pane_id} #{window_id} #{pane_title}' 2>/dev/null)
     return 1
 }
 
@@ -284,12 +282,8 @@ sidebar_follow_to_window() {
     [ -n "$dest" ] || return 0
     sidebar_follow_enabled || return 0
 
-    local found pane src_win dest_win width leftmost dest_session
-    # Resolve the destination's session first: the sidebar that follows is that
-    # session's own, not whichever one happens to be enumerated first.
-    dest_session=$(tmux display-message -t "$dest" -p '#{session_name}' 2>/dev/null || true)
-    [ -n "$dest_session" ] || return 0
-    found=$(_sidebar_pane_location "$dest_session") || return 0
+    local found pane src_win dest_win width leftmost
+    found=$(_sidebar_pane_location) || return 0
     pane="${found%% *}"
     src_win="${found##* }"
 
