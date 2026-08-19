@@ -170,6 +170,13 @@ set -g @agent-sidebar-width "42"
 # for one sidebar per window, which costs a renderer process per window.
 set -g @agent-sidebar-per-window "off"     # off | on
 
+# Follow mode: keep one sidebar and move it to whatever window you jump to,
+# instead of one per window (a process each) or one per session (stranded in
+# the window it was opened in). The pane is moved with join-pane, so the
+# renderer is carried along rather than restarted. Jumps between panes of the
+# same window do nothing.
+set -g @agent-sidebar-follow "off"         # off | on
+
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by
 # window index rather than by whichever agent was found first.

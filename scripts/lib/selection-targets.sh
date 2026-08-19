@@ -211,19 +211,90 @@ selection_switch_client() {
     session=$(selection_session "$sel_name" "$sel_type")
     token=$(selection_token "$sel_name" "$sel_type")
 
+    # Follow mode moves the sidebar to the destination before the switch, so it
+    # is already in place on arrival. A no-op unless @agent-sidebar-follow is on.
     case "$scope" in
         pane)
             win_idx=$(tmux display-message -t "$token" -p "#{window_index}" 2>/dev/null || true)
+            [ -n "$win_idx" ] && sidebar_follow_to_window "${session}:${win_idx}"
             tmux switch-client -t "$session" 2>/dev/null
             [ -n "$win_idx" ] && tmux select-window -t "${session}:${win_idx}" 2>/dev/null
             tmux select-pane -t "$token" 2>/dev/null
             ;;
         window)
+            sidebar_follow_to_window "${session}:${token#w}"
             tmux switch-client -t "$session" 2>/dev/null
             tmux select-window -t "${session}:${token#w}" 2>/dev/null
             ;;
         session)
+            sidebar_follow_to_window "$session"
             tmux switch-client -t "$session" 2>/dev/null
             ;;
     esac
+}
+
+# ─── Follow mode (@agent-sidebar-follow) ──────────────────────────
+# A sidebar is a pane and a pane belongs to exactly one window, so covering
+# every window costs a renderer per window, while one-per-session leaves the
+# sidebar stranded in whichever window it was opened in. Follow mode keeps a
+# single sidebar and moves it to wherever you jump.
+#
+# join-pane moves the pane *and the process inside it*, and a pane id is stable
+# across the move -- so the renderer never restarts, and sidebar client tracking
+# (which is keyed by pane id) stays valid. sidebar.sh needs no changes either:
+# it re-reads #{client_session} every cycle, so it renders the destination's
+# tree on its own once moved.
+sidebar_follow_enabled() {
+    case "$(tmux show-option -gqv "@agent-sidebar-follow" 2>/dev/null)" in
+        1|on|true|yes) return 0 ;;
+        *)             return 1 ;;
+    esac
+}
+
+# "<pane_id> <window_id>" for the one sidebar, wherever it currently lives.
+_sidebar_pane_location() {
+    local title="${SIDEBAR_TITLE:-agent-sidebar}" pid wid ptitle
+    while read -r pid wid ptitle; do
+        if [ "$ptitle" = "$title" ]; then
+            printf '%s %s' "$pid" "$wid"
+            return 0
+        fi
+    done < <(tmux list-panes -a -F '#{pane_id} #{window_id} #{pane_title}' 2>/dev/null)
+    return 1
+}
+
+# Move the sidebar into the window that is about to be selected. A no-op when
+# follow is off, when there is no sidebar, or when the jump stays inside the
+# window the sidebar is already in -- moving between panes of one window is not
+# a window switch.
+sidebar_follow_to_window() {
+    local dest="$1"
+    [ -n "$dest" ] || return 0
+    sidebar_follow_enabled || return 0
+
+    local found pane src_win dest_win width leftmost
+    found=$(_sidebar_pane_location) || return 0
+    pane="${found%% *}"
+    src_win="${found##* }"
+
+    dest_win=$(tmux display-message -t "$dest" -p '#{window_id}' 2>/dev/null) || return 0
+    [ -n "$dest_win" ] || return 0
+    [ "$src_win" = "$dest_win" ] && return 0
+
+    width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
+    [ -z "$width" ] && width=42
+
+    # A zoomed destination has no free layout to join into: the pane would land
+    # inside the hidden layout and reappear only when the zoom is dropped.
+    if [ "$(tmux display-message -t "$dest_win" -p '#{window_zoomed_flag}' 2>/dev/null)" = "1" ]; then
+        tmux resize-pane -t "$dest_win" -Z 2>/dev/null || true
+    fi
+
+    leftmost=$(tmux list-panes -t "$dest_win" -F '#{pane_left} #{pane_id}' 2>/dev/null \
+        | sort -n | head -1 | awk '{print $2}')
+    [ -n "$leftmost" ] || return 0
+
+    # -f full window height, -b to the left, -d so focus stays with the caller's
+    # target rather than jumping into the sidebar.
+    tmux join-pane -bhfd -l "$width" -s "$pane" -t "$leftmost" 2>/dev/null || true
 }
