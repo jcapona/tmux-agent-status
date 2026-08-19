@@ -62,8 +62,13 @@ signal_sidebar_clients() {
     for pane_file in "$SIDEBAR_CLIENT_DIR/"*.pid; do
         [ -f "$pane_file" ] || continue
 
-        pane_id="$(basename "$pane_file" .pid)"
-        pid="$(cat "$pane_file" 2>/dev/null || echo "")"
+        # Parameter expansion and $(<file), not basename and cat: both of those
+        # fork a subshell, and this loop runs four times a second per client to
+        # drive the spinner. Two forks per client per tick is the kind of cost
+        # that does not show up in any one place and adds up to a percent.
+        pane_id="${pane_file##*/}"
+        pane_id="${pane_id%.pid}"
+        pid="$(<"$pane_file")" 2>/dev/null || pid=""
 
         if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
             rm -f "$pane_file"
