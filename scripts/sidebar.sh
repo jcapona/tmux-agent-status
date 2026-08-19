@@ -1254,8 +1254,13 @@ while true; do
         _handle_escape() {
             read -rsn2 -t 0.1 seq
             case "$seq" in
-                '[A') (( SELECTED > SESS_START )) && ((SELECTED--)); return 0 ;;
-                '[B') (( SELECTED < SEL_COUNT - 1 )) && ((SELECTED++)); return 0 ;;
+                # Both encodings: a terminal in application cursor mode (DECCKM)
+                # sends SS3 -- ESC O A -- rather than CSI -- ESC [ A. Handling
+                # only the CSI form left the arrow keys dead wherever that mode
+                # was on, while j/k kept working, which reads as "arrows do
+                # nothing in the sidebar".
+                '[A'|'OA') (( SELECTED > SESS_START )) && ((SELECTED--)); return 0 ;;
+                '[B'|'OB') (( SELECTED < SEL_COUNT - 1 )) && ((SELECTED++)); return 0 ;;
                 '[<')
                     # SGR mouse: read "button;x;yM" or "button;x;ym"
                     local mdata="" mc=""
