@@ -39,6 +39,9 @@ tm select-pane -t "$SIDEBAR_PANE" -T "agent-sidebar"
 ORIG_PID=$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_pid}')
 
 win_of() { tm display-message -t "$1" -p '#{window_id}' 2>/dev/null; }
+sidebar_win_of() {
+    tm list-panes -a -F '#{pane_id} #{window_id}' 2>/dev/null | awk -v p="$1" '$1==p{print $2}'
+}
 sidebar_win() {
     tm list-panes -a -F '#{pane_id} #{window_id} #{pane_title}' 2>/dev/null \
       | awk '$3=="agent-sidebar"{print $2}'
@@ -59,13 +62,13 @@ run_follow() {
 
 # ── off by default: nothing moves ──────────────────────────────────
 START_WIN=$(sidebar_win)
-run_follow "s1:3"
+run_follow "s1:2"
 check "follow off leaves the sidebar alone"   "$START_WIN" "$(sidebar_win)"
 
 # ── on: moves across windows, same pane, same process ──────────────
 tm set-option -g @agent-sidebar-follow on
-run_follow "s1:3"
-check "follow on moves it to the target window" "$(win_of s1:3)" "$(sidebar_win)"
+run_follow "s1:2"
+check "follow on moves it to the target window" "$(win_of s1:2)" "$(sidebar_win)"
 check "  the pane id is unchanged"              "$SIDEBAR_PANE" \
       "$(tm list-panes -a -F '#{pane_id} #{pane_title}' | awk '$2=="agent-sidebar"{print $1}')"
 check "  the process was carried, not restarted" "$ORIG_PID" \
@@ -75,27 +78,49 @@ check "  still exactly one sidebar"             "1" \
 
 # ── same window is not a window switch ─────────────────────────────
 BEFORE=$(sidebar_win)
-run_follow "s1:3"
+run_follow "s1:2"
 check "same-window jump is a no-op"             "$BEFORE" "$(sidebar_win)"
 
 # ── across sessions ────────────────────────────────────────────────
-run_follow "s2:1"
-check "follows across sessions too"             "$(win_of s2:1)" "$(sidebar_win)"
+run_follow "s2:0"
+check "follows across sessions too"             "$(win_of s2:0)" "$(sidebar_win)"
 check "  process still alive after 2 moves"     "$ORIG_PID" \
       "$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_pid}')"
 
 # ── a zoomed destination is unzoomed rather than swallowing the pane ─
-tm select-window -t s1:2
-tm resize-pane -t s1:2 -Z 2>/dev/null
-run_follow "s1:2"
-check "zoomed destination still receives it"    "$(win_of s1:2)" "$(sidebar_win)"
+tm select-window -t s1:1
+tm resize-pane -t s1:1 -Z 2>/dev/null
+run_follow "s1:1"
+check "zoomed destination still receives it"    "$(win_of s1:1)" "$(sidebar_win)"
 check "  and is no longer zoomed"               "0" \
-      "$(tm display-message -t s1:2 -p '#{window_zoomed_flag}')"
+      "$(tm display-message -t s1:1 -p '#{window_zoomed_flag}')"
+
+# ── a destination that already has its own sidebar ─────────────────
+# The session-created hook makes one sidebar per session, so arriving at a
+# window that already has one is the common case. Joining ours in would stack
+# two in the same window, both rendering the same tree.
+tm set-option -g @agent-sidebar-follow on
+OTHER=$(tm split-window -t s1:2 -PF '#{pane_id}' "sleep 600")
+tm select-pane -t "$OTHER" -T "agent-sidebar"
+HOME_WIN=$(sidebar_win_of "$SIDEBAR_PANE")
+run_follow "s1:2"
+check "occupied destination is not doubled up"  "1" \
+      "$(tm list-panes -t s1:2 -F '#{pane_title}' | grep -c '^agent-sidebar$')"
+check "  and ours stays where it was"           "$HOME_WIN" "$(sidebar_win_of "$SIDEBAR_PANE")"
+tm kill-pane -t "$OTHER" 2>/dev/null
+
+# ── a window target that does not exist ────────────────────────────
+# tmux resolves a bogus "session:index" to the session's CURRENT window rather
+# than failing, so without an explicit check this silently moved the sidebar
+# somewhere arbitrary.
+HELD=$(sidebar_win_of "$SIDEBAR_PANE")
+run_follow "s1:99"
+check "nonexistent window target is ignored"    "$HELD" "$(sidebar_win_of "$SIDEBAR_PANE")"
 
 # ── off again: stops moving ────────────────────────────────────────
 tm set-option -g @agent-sidebar-follow off
 HELD=$(sidebar_win)
-run_follow "s1:3"
+run_follow "s1:2"
 check "turning follow off stops the moving"     "$HELD" "$(sidebar_win)"
 
 if [ "$FAILURES" -ne 0 ]; then printf '\n%d check(s) failed\n' "$FAILURES"; exit 1; fi

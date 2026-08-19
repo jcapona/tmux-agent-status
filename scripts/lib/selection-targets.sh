@@ -251,6 +251,11 @@ sidebar_follow_enabled() {
     esac
 }
 
+_window_has_sidebar() {
+    local title="${SIDEBAR_TITLE:-agent-sidebar}"
+    tmux list-panes -t "$1" -F '#{pane_title}' 2>/dev/null | grep -qxF "$title"
+}
+
 # "<pane_id> <window_id>" for the one sidebar, wherever it currently lives.
 _sidebar_pane_location() {
     local title="${SIDEBAR_TITLE:-agent-sidebar}" pid wid ptitle
@@ -277,9 +282,30 @@ sidebar_follow_to_window() {
     pane="${found%% *}"
     src_win="${found##* }"
 
+    # tmux does NOT fail on a window target that does not exist: it silently
+    # falls back to the session's current window. Without this check, jumping to
+    # a window that has since closed would drag the sidebar into whatever window
+    # happens to be current instead of doing nothing. A bare session target has
+    # no index, and there resolving to the current window is the intent.
+    if [ "${dest}" != "${dest%:*}" ]; then
+        local want_idx have_idx
+        want_idx="${dest##*:}"
+        have_idx=$(tmux display-message -t "$dest" -p '#{window_index}' 2>/dev/null || true)
+        [ "$want_idx" = "$have_idx" ] || return 0
+    fi
+
     dest_win=$(tmux display-message -t "$dest" -p '#{window_id}' 2>/dev/null) || return 0
     [ -n "$dest_win" ] || return 0
     [ "$src_win" = "$dest_win" ] && return 0
+
+    # The destination may already have its own sidebar -- the session-created
+    # hook makes one per session, so this is the common case, not an edge one.
+    # Joining ours in anyway would leave two sidebars stacked in one window,
+    # each rendering the same tree. The destination is already covered, so
+    # leave both where they are.
+    if _window_has_sidebar "$dest_win"; then
+        return 0
+    fi
 
     width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
     [ -z "$width" ] && width=42
