@@ -133,6 +133,11 @@ fi
 # Quotes are stripped from both sides before comparing because tmux re-renders
 # hook commands with its own quoting, which will not match ours byte for byte.
 # Same idea as the status-right guard above.
+# tmux silently accepts hook names it does not have: `set-hook -g <nonsense> ...`
+# exits 0, prints nothing, and never appears in `show-hooks -g`. A typo or an
+# invented name therefore looks registered forever and never fires. Five of
+# these had accumulated here. tests/hooks-exist.sh checks every name below
+# against what tmux reports.
 add_hook_once() {
     local hook="$1" cmd="$2" key
     key=$(printf '%s' "$cmd" | tr -d "\"'")
@@ -151,7 +156,6 @@ add_hook_once client-attached "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal
 add_hook_once client-session-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 add_hook_once after-select-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
-add_hook_once after-switch-client "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 
 # Follow mode: the sidebar goes where you go. Hooked to tmux's own window
@@ -162,27 +166,28 @@ add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar
 add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
 add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
 add_hook_once client-session-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
-add_hook_once window-pane-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 
 # Nudge the collector when tmux structure or names change so cache rebuilds stay
 # event-driven instead of waiting for a fallback poll.
 add_hook_once session-created "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-add_hook_once pane-exited "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-add_hook_once window-layout-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-# Keep the sidebar at its configured width. tmux reflows every pane in a window
-# when one opens or closes, so a sidebar that arrived at the right width drifts
-# to whatever share the layout gives it.
-#
-# Not window-layout-changed: that hook does not exist in tmux (it is not in
-# `show-hooks -g`), so registering it is silently a no-op. These are the real
-# events that reflow a window.
+# These are the events that actually reflow a window. The block used to hook
+# window-layout-changed, which tmux does not have -- see the note above
+# add_hook_once for why that is silent rather than an error.
+add_hook_once after-split-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-kill-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-resize-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-resize-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once after-select-layout "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+
+# Keep the sidebar at its configured width: the same reflow events, since tmux
+# redistributes every pane in a window when one opens or closes.
 add_hook_once after-split-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once after-kill-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once after-resize-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once after-select-layout "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once client-resized "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
-add_hook_once after-kill-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+add_hook_once window-unlinked "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 
 # ── Sidebar placement (@agent-sidebar-per-window) ─────────────────
