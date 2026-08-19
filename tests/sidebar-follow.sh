@@ -168,6 +168,26 @@ HELD=$(sidebar_win)
 run_follow "s1:2"
 check "turning follow off stops the moving"     "$HELD" "$(sidebar_win)"
 
+# ── prefix+O must still close it ───────────────────────────────────
+# Summoning on every toggle invocation swallowed --toggle: with the sidebar
+# already in this window there was no way to close it, because the summon path
+# exited before reaching the close path.
+tm set-option -g @agent-sidebar-follow on
+HERE=$(tm display-message -t s1:0 -p '#{window_id}')
+run_toggle() {
+    PATH="$TMP_DIR/bin:$PATH" bash -c '
+      tmux() { "'"$REAL_TMUX"'" -L "'"$SOCKET"'" "$@"; }
+      export -f tmux 2>/dev/null || true
+      "'"$REPO_DIR"'/scripts/sidebar-toggle.sh" --toggle "'"$1"'"
+    ' >/dev/null 2>&1
+}
+run_follow "s1:0"
+check "sidebar is in the window we will toggle" "$HERE" "$(sidebar_win_of "$SIDEBAR_PANE")"
+run_toggle "$HERE"
+sleep 1
+check "toggle closes it when it is here"        "0" \
+      "$(tm list-panes -t "$HERE" -F '#{pane_title}' | grep -cx 'agent-sidebar')"
+
 # ── concurrent creates yield one sidebar, not a herd ───────────────
 # session-created fires once per session, so on a busy server a dozen of these
 # run within the same half second. Check-then-create let them all see "none

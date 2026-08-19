@@ -43,9 +43,18 @@ fi
 if . "$CURRENT_DIR/lib/selection-targets.sh" 2>/dev/null && sidebar_follow_enabled; then
     _follow_target="${TARGET:-$(tmux display-message -p '#{window_id}' 2>/dev/null)}"
 
-    if _sidebar_pane_location >/dev/null 2>&1; then
-        sidebar_follow_to_window "$_follow_target"
-        exit 0
+    _found=$(_sidebar_pane_location 2>/dev/null || true)
+    if [ -n "$_found" ]; then
+        _here=$(tmux display-message -t "$_follow_target" -p '#{window_id}' 2>/dev/null || true)
+        if [ "${_found##* }" = "$_here" ]; then
+            # It is already in this window. Summoning would be a no-op and would
+            # swallow --toggle, leaving no way to close it. Fall through to the
+            # normal toggle path so prefix+O still closes what it opened.
+            :
+        else
+            sidebar_follow_to_window "$_follow_target"
+            exit 0
+        fi
     fi
 
     # No sidebar yet -- but session-created fires once per session, so on a
