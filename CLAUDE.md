@@ -96,9 +96,33 @@ resize it are asserting against a width they never set.
 is what makes follow mode possible without restarting the renderer. `-d` keeps
 focus where it was; `-f` makes the pane span the full window.
 
+**`tmux kill-pane -t ""` kills the *current* pane.** An empty target is not an
+error — it resolves to whatever is focused. So a script that finds a pane id
+into a variable and then kills it destroys the user's work whenever the search
+came back empty, and takes the window with it if that was the last pane. Guard
+every `-t "$VAR"` against empty before a destructive command. This has already
+closed a window someone was working in.
+
+**Verify keystroke behaviour on a private tmux server, never the user's.**
+`send-keys` against a live pane sends real input to real programs. Tests here
+spawn their own server with `tmux -L <socket>`; interactive checking should too.
+
 **`base-index` defaults to 0.** A test server started with `-f /dev/null` has
 windows 0..N-1. Naming `s1:3` in a three-window session hits the fallback above
 and silently tests something else.
+
+**Arrow keys arrive in two encodings.** Normally CSI — `ESC [ A` — but a
+terminal in application cursor mode (DECCKM) sends SS3 — `ESC O A`. Handling
+only one leaves the arrows dead wherever the other mode is active while j/k keep
+working, which reads as "arrows do nothing" rather than as an encoding problem.
+
+**An unhandled escape sequence is not a bare Esc.** If a handler reports
+"unrecognised" for both, and the caller treats that as Esc, then every key that
+sends a sequence it does not act on — Left, Right, Home, End, PageUp, function
+keys — takes the Esc path. In this repo that path was `exit 0`, so those keys
+closed the sidebar. Report a sequence as consumed whether or not it maps to an
+action, and drain longer sequences to their final byte so the tail is not read
+back as a keystroke.
 
 **A sidebar pane's stdout *is* the pane.** Any stray output — a shell error, a
 debug `echo` — is printed into the UI, twice a second. A `local` outside a
