@@ -167,12 +167,13 @@ add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-si
 # ── Sidebar placement (@agent-sidebar-per-window) ─────────────────
 # A sidebar is a pane, and a pane belongs to exactly one window, so "a sidebar
 # in every session" only ever means "in one window of it" -- switch windows and
-# it is gone. That is not what a persistent sidebar should mean, so every window
-# gets its own by default. Set this to "off" for one per session instead, which
-# costs one process rather than one per window.
+# it is gone. Covering every window is therefore one renderer process per
+# window. Measured on a fixed workload, 12 renderers cost 2.81% of a core
+# against 0.70% for 3 -- so per-session is the cheaper default by roughly 4x.
+# Off by default; set "on" to put one in every window.
 case "$(tmux show-option -gqv "@agent-sidebar-per-window")" in
-    0|off|false|no) sidebar_per_window=0 ;;
-    *)              sidebar_per_window=1 ;;
+    1|on|true|yes) sidebar_per_window=1 ;;
+    *)             sidebar_per_window=0 ;;
 esac
 
 # Auto-create sidebar in new sessions (small delay so the session is ready).
