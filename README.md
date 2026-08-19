@@ -162,12 +162,17 @@ set -g @agent-status-line "off"            # off | on
 
 set -g @agent-switcher-style "both"        # popup | sidebar | both
 set -g @agent-status-display-method "popup" # popup | window
+# Sidebar width. Re-asserted whenever a window is reflowed (a pane opening or
+# closing redistributes every pane in the window), so the sidebar keeps this
+# width instead of drifting to whatever share the layout gives it. Ignored for
+# a window too narrow to give it without squeezing everything else.
 set -g @agent-sidebar-width "42"
 
-# Every window gets its own sidebar (default). A sidebar is a pane, so it lives
-# in exactly one window -- one per session means it vanishes the moment you
-# switch windows. Off (the default) runs one renderer per session. Set "on"
-# for one sidebar per window, which costs a renderer process per window.
+# A sidebar is a pane, so it lives in exactly one window. Off (the default) runs
+# one renderer per session, which means it is only in the window it was opened
+# in. Set "on" for one sidebar per window, at the cost of a renderer process per
+# window. See @agent-sidebar-follow below for the third option: exactly one
+# sidebar that moves to wherever you are.
 set -g @agent-sidebar-per-window "off"     # off | on
 
 # Follow mode: exactly one sidebar for the whole server, which moves to
