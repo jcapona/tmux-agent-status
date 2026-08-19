@@ -256,15 +256,22 @@ _window_has_sidebar() {
     tmux list-panes -t "$1" -F '#{pane_title}' 2>/dev/null | grep -qxF "$title"
 }
 
-# "<pane_id> <window_id>" for the one sidebar, wherever it currently lives.
+# "<pane_id> <window_id>" for the sidebar belonging to a given session.
+#
+# Scoped to the session on purpose. Scanning every pane and taking the first
+# match picks an arbitrary sidebar -- with one auto-created per session that is
+# some other session's, which then gets dragged into the window you switched to,
+# carrying its width with it. The sidebar that should follow you is the one in
+# the session you are moving within.
 _sidebar_pane_location() {
+    local scope="$1"
     local title="${SIDEBAR_TITLE:-agent-sidebar}" pid wid ptitle
     while read -r pid wid ptitle; do
         if [ "$ptitle" = "$title" ]; then
             printf '%s %s' "$pid" "$wid"
             return 0
         fi
-    done < <(tmux list-panes -a -F '#{pane_id} #{window_id} #{pane_title}' 2>/dev/null)
+    done < <(tmux list-panes -s -t "$scope" -F '#{pane_id} #{window_id} #{pane_title}' 2>/dev/null)
     return 1
 }
 
@@ -277,8 +284,12 @@ sidebar_follow_to_window() {
     [ -n "$dest" ] || return 0
     sidebar_follow_enabled || return 0
 
-    local found pane src_win dest_win width leftmost
-    found=$(_sidebar_pane_location) || return 0
+    local found pane src_win dest_win width leftmost dest_session
+    # Resolve the destination's session first: the sidebar that follows is that
+    # session's own, not whichever one happens to be enumerated first.
+    dest_session=$(tmux display-message -t "$dest" -p '#{session_name}' 2>/dev/null || true)
+    [ -n "$dest_session" ] || return 0
+    found=$(_sidebar_pane_location "$dest_session") || return 0
     pane="${found%% *}"
     src_win="${found##* }"
 
@@ -311,11 +322,25 @@ sidebar_follow_to_window() {
     # one. Passing @agent-sidebar-width on every move undoes any manual resize:
     # a sidebar narrowed to 28 columns snapped back to 42 each time you changed
     # window, which reads as the sidebar growing on its own.
+    local configured dest_cols
+    configured=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
+    [ -z "$configured" ] && configured=42
+
     width=$(tmux display-message -t "$pane" -p '#{pane_width}' 2>/dev/null || true)
+    dest_cols=$(tmux display-message -t "$dest_win" -p '#{window_width}' 2>/dev/null || true)
+
+    # A carried width only makes sense if it still leaves room for the window's
+    # own panes. A sidebar that is currently full-width -- which happens when it
+    # is stacked rather than split to the side -- would otherwise be carried over
+    # verbatim and clamped by tmux to a single column.
     case "$width" in
-        ''|*[!0-9]*|0)
-            width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
-            [ -z "$width" ] && width=42
+        ''|*[!0-9]*|0) width="$configured" ;;
+        *)
+            if [ -n "$dest_cols" ] && [ "$dest_cols" -gt 0 ] 2>/dev/null; then
+                if [ "$width" -ge $(( dest_cols / 2 )) ]; then
+                    width="$configured"
+                fi
+            fi
             ;;
     esac
 

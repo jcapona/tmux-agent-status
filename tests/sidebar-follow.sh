@@ -82,9 +82,12 @@ run_follow "s1:2"
 check "same-window jump is a no-op"             "$BEFORE" "$(sidebar_win)"
 
 # ── across sessions ────────────────────────────────────────────────
+# A session with no sidebar of its own gets nothing: dragging s1's sidebar into
+# s2 would leave s1 without one. Following is within a session.
+HELD=$(sidebar_win_of "$SIDEBAR_PANE")
 run_follow "s2:0"
-check "follows across sessions too"             "$(win_of s2:0)" "$(sidebar_win)"
-check "  process still alive after 2 moves"     "$ORIG_PID" \
+check "a foreign session is not raided"         "$HELD" "$(sidebar_win_of "$SIDEBAR_PANE")"
+check "  process still alive"                   "$ORIG_PID" \
       "$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_pid}')"
 
 # ── a zoomed destination is unzoomed rather than swallowing the pane ─
@@ -140,6 +143,24 @@ tm resize-pane -t "$SIDEBAR_PANE" -x 28
 run_follow "s1:0"
 check "a hand-set width survives the move"      "28" \
       "$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_width}')"
+
+# ── another session's sidebar is never dragged in ──────────────────
+# One sidebar is auto-created per session, so "find the sidebar" must mean "the
+# one in this session". Scanning every pane and taking the first match hauled a
+# foreign sidebar into the window being switched to, width and all.
+tm set-option -g @agent-sidebar-follow on
+# put our sidebar back in s1, and give s2 its own
+run_follow "s1:0"
+S2BAR=$(tm split-window -fhb -l 20 -t s2:0 -PF '#{pane_id}' "sleep 600")
+tm select-pane -t "$S2BAR" -T "agent-sidebar"
+tm new-window -d -t s2 -n s2w2
+S1_HOME=$(sidebar_win_of "$SIDEBAR_PANE")
+
+run_follow "s2:1"
+check "s2's own sidebar is the one that moved"  "$(win_of s2:1)" "$(sidebar_win_of "$S2BAR")"
+check "  s1's sidebar was left alone"           "$S1_HOME" "$(sidebar_win_of "$SIDEBAR_PANE")"
+check "  and it kept its own width"             "20" \
+      "$(tm display-message -t "$S2BAR" -p '#{pane_width}')"
 
 # ── off again: stops moving ────────────────────────────────────────
 tm set-option -g @agent-sidebar-follow off
