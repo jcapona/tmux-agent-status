@@ -63,12 +63,13 @@ placement follows from that:
 
 ### tmux
 
-**`window-layout-changed` is not a tmux hook.** It is not in `show-hooks -g`, and
-`set-hook -g window-layout-changed ...` is accepted without error — so it looks
-registered and silently never fires. Use `after-split-window`, `after-kill-pane`,
-`after-resize-window`, `after-select-layout`, `client-resized`.
-*`tmux-agent-status.tmux` still registers it for the collector. That hook has
-never fired.*
+**tmux silently accepts hook names it does not have.** `set-hook -g <nonsense>
+...` exits 0, prints nothing, and the hook never appears in `show-hooks -g` — so
+a typo or an invented name looks registered forever and never fires. Five had
+accumulated in this repo: `window-layout-changed`, `after-switch-client`,
+`window-pane-changed`, `pane-exited` and `after-kill-window`. None had ever run.
+`tests/hooks-exist.sh` now checks every registered name against what tmux
+reports; run it before adding a hook.
 
 **`display-message -t "session:99"` does not fail on a window that does not
 exist.** It silently returns the session's *current* window. Validate by
@@ -141,4 +142,4 @@ them. Check the PR state before concluding work is unmerged, and before using
 
 ## Known dead code
 
-- The `window-layout-changed` hook for the collector (see above) — never fires.
+- *(nothing currently known — the five dead hooks were removed; see the traps.)*
