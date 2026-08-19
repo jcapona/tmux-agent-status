@@ -1,12 +1,14 @@
 # tmux-agent-status
 
-Sidebar-first AI agent session manager for tmux. It gives each tmux session a persistent status sidebar, adds a hierarchical `fzf` target switcher for fast jumps and cleanup across agent sessions, windows, and panes, and can optionally keep a compact summary in the status line.
+Sidebar-first AI agent session manager for tmux. It keeps a persistent status sidebar wherever you want it -- per session, per window, or a single one that follows you -- adds a hierarchical `fzf` target switcher for fast jumps and cleanup across agent sessions, windows, and panes, and can optionally keep a compact summary in the status line.
 
 Claude Code and Codex CLI are both integrated through hooks, so their states come from agent lifecycle events rather than fragile process polling. Custom agents can still integrate through status files or collector extensions.
 
 ## Features
 
-- Persistent sidebar per session, or in every window with `@agent-sidebar-per-window`
+- Persistent status sidebar, in one of three placements: one per session (default),
+  one per window (`@agent-sidebar-per-window`), or a single sidebar that follows you
+  from window to window (`@agent-sidebar-follow`) for one renderer process in total
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
@@ -80,14 +82,17 @@ Integrate any AI coding tool with either of these approaches:
 
 Default mode is sidebar-first:
 
-- Every tmux session gets a sidebar pane automatically
+- Every tmux session gets a sidebar pane automatically (not under
+  `@agent-sidebar-follow`, where a single sidebar is opened once and then follows you)
 - `prefix + S` opens the hierarchical `fzf` target switcher
-- `prefix + O` toggles the sidebar in the current window (opens it, or closes it when already visible)
+- `prefix + O` toggles the sidebar in the current window (opens it, or closes it when
+  already visible). Under `@agent-sidebar-follow` it also summons the single sidebar
+  here when it is in another window
 
 | Key | Action |
 |-----|--------|
 | `prefix + S` | Open the hierarchical `fzf` target switcher |
-| `prefix + O` | Toggle the sidebar: opens it, closes it when already visible |
+| `prefix + O` | Toggle the sidebar: opens it, closes it when already visible, or summons it here under follow mode |
 | `prefix + N` | Jump to the next inbox item in inbox order |
 | `prefix + W` | Put the current session or pane into timed wait mode |
 | `prefix + P` | Park the current session or pane for later |
@@ -133,6 +138,7 @@ Inside the popup switcher:
 Inside the sidebar:
 
 - `x`, `p`, and `w` perform the same close, park, and wait actions without interfering with popup search input
+- `m` toggles between tree and agents view (rebind with `@agent-sidebar-mode-key`)
 
 `prefix + N` follows the same top-to-bottom order as the `INBOX` section. The inbox is ordered by session name, then by tmux window order within each session.
 
