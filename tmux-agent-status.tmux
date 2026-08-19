@@ -172,7 +172,15 @@ add_hook_once window-layout-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-
 # Keep the sidebar at its configured width. tmux reflows every pane in a window
 # when one opens or closes, so a sidebar that arrived at the right width drifts
 # to whatever share the layout gives it.
-add_hook_once window-layout-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+#
+# Not window-layout-changed: that hook does not exist in tmux (it is not in
+# `show-hooks -g`), so registering it is silently a no-op. These are the real
+# events that reflow a window.
+add_hook_once after-split-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once after-kill-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once after-resize-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once after-select-layout "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once client-resized "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-kill-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
