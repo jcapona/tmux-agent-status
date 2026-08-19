@@ -1289,7 +1289,23 @@ while true; do
                     return 0
                     ;;
             esac
-            return 1  # unhandled
+            # A sequence we do not act on -- Left, Right, Home, End, PageUp, function
+            # keys. It must still be reported as consumed: the caller treats "not
+            # handled" as a bare Esc and exits, so pressing Left closed the sidebar.
+            if [ -n "$seq" ]; then
+                # Drain the rest of a longer sequence (Home is ESC [ 1 ~) so its
+                # trailing bytes are not read as keystrokes and trigger actions.
+                case "$seq" in
+                    '['[0-9]*)
+                        local _tail=""
+                        while read -rsn1 -t 0.05 _tail; do
+                            case "$_tail" in [A-Za-z~]) break ;; esac
+                        done
+                        ;;
+                esac
+                return 0
+            fi
+            return 1  # a bare Esc, with nothing following
         }
 
         if (( WAIT_INPUT_ACTIVE )); then

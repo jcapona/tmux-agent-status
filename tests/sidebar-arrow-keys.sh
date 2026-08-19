@@ -36,5 +36,31 @@ check "j still moves down"             "yes" \
 check "k still moves up"               "yes" \
       "$(grep -qE '^\s+k\)\s+\(\( SELECTED > SESS_START' "$REPO_DIR/scripts/sidebar.sh" && echo yes || echo no)"
 
+# ── unhandled escape sequences must not close the sidebar ──────────
+# A bare Esc exits, and _handle_escape reported every sequence it did not act on
+# as "not handled" -- which took the same branch. Pressing Left closed the
+# sidebar, as did Right, Home, End, PageUp and every function key.
+SOCKET="arrowtest$$"
+REAL_TMUX="$(command -v tmux)"
+tm() { "$REAL_TMUX" -L "$SOCKET" "$@"; }
+trap 'tm kill-server 2>/dev/null' EXIT
+tm -f /dev/null new-session -d -x 200 -y 50 2>/dev/null
+B4="$( . "$REPO_DIR/scripts/lib/require-bash4.sh" 2>/dev/null; _tmux_agent_status_find_bash4 2>/dev/null )"
+PANE=$(tm split-window -fhb -l 42 -PF '#{pane_id}' "${B4:-bash} $REPO_DIR/scripts/sidebar.sh" 2>/dev/null)
+sleep 2
+alive() { tm list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qFx "$PANE" && echo yes || echo no; }
+
+for k in Left Right Home End PageUp; do
+    tm send-keys -t "$PANE" "$k" 2>/dev/null
+    sleep 0.3
+    check "$k does not close the sidebar" "yes" "$(alive)"
+    [ "$(alive)" = "no" ] && break
+done
+
+# ...but a bare Esc still does.
+tm send-keys -t "$PANE" Escape 2>/dev/null
+sleep 1.5
+check "a bare Esc still closes it"     "no"  "$(alive)"
+
 if [ "$FAILURES" -ne 0 ]; then printf '\n%d check(s) failed\n' "$FAILURES"; exit 1; fi
 printf '\nall checks passed\n'
