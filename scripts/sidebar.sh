@@ -1127,6 +1127,26 @@ action_park() {
     _LAST_STATUS_MTIME=""
 }
 
+# ─── First paint ──────────────────────────────────────────────────
+# Paint before collecting anything. Startup is ~120ms -- bash, four sourced
+# libs, then a collect and a full render -- and for all of it the pane sits
+# blank, so opening the sidebar reads as two events: a bare pane appearing, and
+# content arriving. Clearing and drawing the frame immediately costs nothing
+# measurable and makes the pane look intentional from the first frame; the rows
+# then fill in where an empty frame already was.
+#
+# Only in pane mode: preview mode renders into a popup that is already framed.
+if (( ! PREVIEW_MODE )); then
+    {
+        _fp_w=$( { read -r _ _c < <(stty size 2>/dev/null); echo "${_c:-30}"; } )
+        printf '\033[2J\033[H'
+        printf '%s' "${DIM}"
+        printf '\u2500%.0s' $(seq 1 "$_fp_w")
+        printf '%s' "${RST}"
+        unset _fp_w _c
+    } 2>/dev/null || true
+fi
+
 # ─── Main loop ────────────────────────────────────────────────────
 NEEDS_COLLECT=1
 NEEDS_RENDER=1

@@ -25,6 +25,22 @@ if [ "${1:-}" = "--toggle" ]; then
 fi
 TARGET="${1:-}"
 
+# Launch the renderer under a Bash 4 interpreter directly rather than letting
+# its shebang pick /bin/bash and re-exec. On macOS /bin/bash is 3.2, so
+# require-bash4.sh execs the script again under Homebrew bash -- two process
+# startups for one sidebar, measured at ~44ms of a ~162ms first paint. The
+# guard stays in place for anyone running the script by hand.
+_renderer_cmd() {
+    local b4=""
+    if . "$CURRENT_DIR/lib/require-bash4.sh" 2>/dev/null \
+       && b4="$(_tmux_agent_status_find_bash4 2>/dev/null)" && [ -n "$b4" ]; then
+        printf '%s %s' "$b4" "$CURRENT_DIR/sidebar.sh"
+    else
+        printf '%s' "$CURRENT_DIR/sidebar.sh"
+    fi
+}
+RENDERER="$(_renderer_cmd)"
+
 # Read configured width.
 width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
 [ -z "$width" ] && width=42
@@ -122,7 +138,7 @@ else
     if [ -n "$file_sidebar" ]; then
         # File manager is open — split below it (inherits the same width).
         new_pane=$(tmux split-window -v -t "$file_sidebar" \
-            -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
+            -PF '#{pane_id}' "$RENDERER")
     else
         # No file manager — create a left-side split spanning the whole window.
         #
@@ -134,7 +150,7 @@ else
         # and subsequent splits divide only the remaining area.
         leftmost=$(tmux list-panes "${target_flag[@]}" -F '#{pane_left} #{pane_id}' | sort -n | head -1 | awk '{print $2}')
         new_pane=$(tmux split-window -fhb -l "$width" -t "$leftmost" \
-            -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
+            -PF '#{pane_id}' "$RENDERER")
     fi
 
     # Tag the pane so we can find it later.
