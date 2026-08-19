@@ -244,10 +244,23 @@ selection_switch_client() {
 # (which is keyed by pane id) stays valid. sidebar.sh needs no changes either:
 # it re-reads #{client_session} every cycle, so it renders the destination's
 # tree on its own once moved.
+# "on"     -- follow jumps made through the sidebar or the switcher
+# "always" -- also follow plain tmux window changes (prefix n, prefix <digit>,
+#             clicking the window list)
+#
+# "on" is the narrower and more predictable of the two: the sidebar moves
+# because you asked it to move, not because you glanced at another window.
 sidebar_follow_enabled() {
     case "$(tmux show-option -gqv "@agent-sidebar-follow" 2>/dev/null)" in
-        1|on|true|yes) return 0 ;;
-        *)             return 1 ;;
+        1|on|true|yes|always) return 0 ;;
+        *)                    return 1 ;;
+    esac
+}
+
+sidebar_follow_always() {
+    case "$(tmux show-option -gqv "@agent-sidebar-follow" 2>/dev/null)" in
+        always) return 0 ;;
+        *)      return 1 ;;
     esac
 }
 

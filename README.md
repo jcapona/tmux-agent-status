@@ -7,8 +7,8 @@ Claude Code and Codex CLI are both integrated through hooks, so their states com
 ## Features
 
 - Persistent status sidebar, in one of three placements: one per session (default),
-  one per window (`@agent-sidebar-per-window`), or a single sidebar that follows you
-  from window to window (`@agent-sidebar-follow`) for one renderer process in total
+  one per window (`@agent-sidebar-per-window`), or a single sidebar that follows your
+  jumps (`@agent-sidebar-follow`) for one renderer process in total
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
@@ -181,16 +181,23 @@ set -g @agent-sidebar-width "42"
 # sidebar that moves to wherever you are.
 set -g @agent-sidebar-per-window "off"     # off | on
 
-# Follow mode: exactly one sidebar for the whole server, which moves to
-# whatever window you switch to -- across sessions as well as windows. The pane
-# is moved with join-pane, so the renderer is carried along rather than
-# restarted, and one process covers everything. Jumps between panes of the same
-# window do nothing.
+# Follow mode: exactly one sidebar for the whole server, which moves to the
+# window you jump to -- across sessions as well as windows. The pane is moved
+# with join-pane, so the renderer is carried along rather than restarted, and
+# one process covers everything. Jumps between panes of the same window do
+# nothing.
+#
+#   on      follow jumps made through the sidebar or the switcher -- pressing
+#           Enter on a row takes the sidebar with you. A plain window change
+#           (prefix+n, prefix+<digit>, the window list) leaves it where it is.
+#   always  also follow plain window changes, so the sidebar is wherever you
+#           are no matter how you got there.
 #
 # Follow mode owns placement, so it disables the per-session auto-create: open
-# the sidebar once (prefix + O) and it follows you from then on. This makes
-# @agent-sidebar-per-window irrelevant.
-set -g @agent-sidebar-follow "off"         # off | on
+# the sidebar once (prefix + O) and it follows from then on. prefix + O also
+# summons it from another window, and still closes it when it is already here.
+# This makes @agent-sidebar-per-window irrelevant.
+set -g @agent-sidebar-follow "off"         # off | on | always
 
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by

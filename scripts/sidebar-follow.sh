@@ -19,7 +19,10 @@ SIDEBAR_TITLE="${SIDEBAR_TITLE:-agent-sidebar}"
 # shellcheck source=/dev/null
 . "$CURRENT_DIR/lib/selection-targets.sh" 2>/dev/null || exit 0
 
-sidebar_follow_enabled || exit 0
+# Only under "always". With plain "on", following happens on sidebar and
+# switcher jumps via selection_switch_client, and a bare window change with
+# prefix+n leaves the sidebar where it is.
+sidebar_follow_always || exit 0
 
 target="${1:-}"
 if [ -z "$target" ]; then

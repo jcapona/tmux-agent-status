@@ -124,7 +124,7 @@ check "nonexistent window target is ignored"    "$HELD" "$(sidebar_win_of "$SIDE
 # Most window switches are prefix+n / prefix+<digit> / the window list, none of
 # which pass through selection_switch_client. Without the hook the sidebar
 # stays behind on exactly the switches people make most.
-tm set-option -g @agent-sidebar-follow on
+tm set-option -g @agent-sidebar-follow always
 TARGET_WIN=$(win_of s1:2)
 SIDEBAR_TITLE=agent-sidebar \
 PATH="$TMP_DIR/bin:$PATH" bash -c '
@@ -167,6 +167,21 @@ tm set-option -g @agent-sidebar-follow off
 HELD=$(sidebar_win)
 run_follow "s1:2"
 check "turning follow off stops the moving"     "$HELD" "$(sidebar_win)"
+
+# ── "on" does not follow a bare window change ──────────────────────
+# The distinction between the two levels: with "on" the sidebar moves because
+# you jumped through it, not because you switched windows some other way.
+tm set-option -g @agent-sidebar-follow on
+run_follow "s1:0"
+HELD=$(sidebar_win_of "$SIDEBAR_PANE")
+SIDEBAR_TITLE=agent-sidebar PATH="$TMP_DIR/bin:$PATH" bash -c '
+  tmux() { "'"$REAL_TMUX"'" -L "'"$SOCKET"'" "$@"; }
+  export -f tmux 2>/dev/null || true
+  "'"$REPO_DIR"'/scripts/sidebar-follow.sh" "'"$(win_of s1:2)"'"
+' 2>/dev/null
+check "\"on\" ignores a bare window change"      "$HELD" "$(sidebar_win_of "$SIDEBAR_PANE")"
+check "  but a sidebar jump still moves it"     "$(win_of s1:2)" \
+      "$(run_follow "s1:2"; sidebar_win_of "$SIDEBAR_PANE")"
 
 # ── prefix+O must still close it ───────────────────────────────────
 # Summoning on every toggle invocation swallowed --toggle: with the sidebar
