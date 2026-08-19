@@ -125,9 +125,14 @@ publish_status_summary() {
 
 tick=0
 while true; do
-    tmux list-sessions >/dev/null 2>&1 || exit 0
-
+    # Liveness, once a second rather than on every 0.25s tick. This is a full
+    # tmux IPC round trip -- measured at 6ms on a server with 15 sessions, so
+    # four a second was 24ms/s, about a third of everything the collector spent.
+    # Noticing a dead server three quarters of a second later costs nothing: the
+    # collector exits either way, and nothing depends on how promptly.
     if (( tick == 0 )); then
+        tmux list-sessions >/dev/null 2>&1 || exit 0
+
         collect_data
         if (( _COLLECT_CHANGED )); then
             serialize_cache
