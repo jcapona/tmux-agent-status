@@ -322,27 +322,13 @@ sidebar_follow_to_window() {
     # one. Passing @agent-sidebar-width on every move undoes any manual resize:
     # a sidebar narrowed to 28 columns snapped back to 42 each time you changed
     # window, which reads as the sidebar growing on its own.
-    local configured dest_cols
-    configured=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
-    [ -z "$configured" ] && configured=42
-
-    width=$(tmux display-message -t "$pane" -p '#{pane_width}' 2>/dev/null || true)
-    dest_cols=$(tmux display-message -t "$dest_win" -p '#{window_width}' 2>/dev/null || true)
-
-    # A carried width only makes sense if it still leaves room for the window's
-    # own panes. A sidebar that is currently full-width -- which happens when it
-    # is stacked rather than split to the side -- would otherwise be carried over
-    # verbatim and clamped by tmux to a single column.
-    case "$width" in
-        ''|*[!0-9]*|0) width="$configured" ;;
-        *)
-            if [ -n "$dest_cols" ] && [ "$dest_cols" -gt 0 ] 2>/dev/null; then
-                if [ "$width" -ge $(( dest_cols / 2 )) ]; then
-                    width="$configured"
-                fi
-            fi
-            ;;
-    esac
+    # Always the configured width. Carrying the pane's current width sounds
+    # respectful of a manual resize, but tmux nudges pane sizes as layouts
+    # change, so each move picks up the drifted value and the sidebar wanders --
+    # visibly resizing every time you switch window. A fixed width is the
+    # predictable behaviour.
+    width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
+    [ -z "$width" ] && width=42
 
     # A zoomed destination has no free layout to join into: the pane would land
     # inside the hidden layout and reappear only when the zoom is dropped.

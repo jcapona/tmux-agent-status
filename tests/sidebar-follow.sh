@@ -134,15 +134,21 @@ PATH="$TMP_DIR/bin:$PATH" bash -c '
 ' 2>/dev/null
 check "the hook script moves it too"            "$TARGET_WIN" "$(sidebar_win_of "$SIDEBAR_PANE")"
 
-# ── a manual resize survives the move ──────────────────────────────
-# Re-imposing @agent-sidebar-width on every move undid any manual resize, so a
-# sidebar narrowed by hand snapped back to the configured width on each window
-# change -- which looks like it is growing by itself.
+# ── width is stable across repeated moves ──────────────────────────
+# Carrying the pane's live width made the sidebar wander: tmux nudges pane
+# sizes as layouts change, so each move picked up the drifted value. The
+# configured width is re-applied instead, so it lands the same every time.
 tm set-option -g @agent-sidebar-follow on
-tm resize-pane -t "$SIDEBAR_PANE" -x 28
+tm set-option -g @agent-sidebar-width 30
 run_follow "s1:0"
-check "a hand-set width survives the move"      "28" \
-      "$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_width}')"
+W1=$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_width}')
+run_follow "s1:1"
+W2=$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_width}')
+run_follow "s1:2"
+W3=$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_width}')
+check "width is the configured one"             "30" "$W1"
+check "  and does not drift over moves"         "30|30" "$W2|$W3"
+tm set-option -g @agent-sidebar-width 42
 
 # ── another session's sidebar is never dragged in ──────────────────
 # One sidebar is auto-created per session, so "find the sidebar" must mean "the
@@ -159,7 +165,7 @@ S1_HOME=$(sidebar_win_of "$SIDEBAR_PANE")
 run_follow "s2:1"
 check "s2's own sidebar is the one that moved"  "$(win_of s2:1)" "$(sidebar_win_of "$S2BAR")"
 check "  s1's sidebar was left alone"           "$S1_HOME" "$(sidebar_win_of "$SIDEBAR_PANE")"
-check "  and it kept its own width"             "20" \
+check "  at the configured width"              "42" \
       "$(tm display-message -t "$S2BAR" -p '#{pane_width}')"
 
 # ── off again: stops moving ────────────────────────────────────────
