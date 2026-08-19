@@ -168,5 +168,32 @@ HELD=$(sidebar_win)
 run_follow "s1:2"
 check "turning follow off stops the moving"     "$HELD" "$(sidebar_win)"
 
+# ── concurrent creates yield one sidebar, not a herd ───────────────
+# session-created fires once per session, so on a busy server a dozen of these
+# run within the same half second. Check-then-create let them all see "none
+# exists" and all create; the run that found this had 11 sidebars.
+tm kill-server 2>/dev/null
+"$REAL_TMUX" -L "$SOCKET" -f /dev/null new-session -d -s r0 -x 200 -y 50
+for i in 1 2 3 4 5 6 7; do tm new-session -d -s "r$i" -x 200 -y 50; done
+tm set-option -g @agent-sidebar-follow on
+rm -f "${TMPDIR:-/tmp}/.tmux-agent-status-sidebar-claim.$(id -u)"
+
+BARRIER="$TMP_DIR/go"
+for i in 0 1 2 3 4 5 6 7; do
+    (
+        while [ ! -f "$BARRIER" ]; do :; done
+        PATH="$TMP_DIR/bin:$PATH" bash -c '
+          tmux() { "'"$REAL_TMUX"'" -L "'"$SOCKET"'" "$@"; }
+          export -f tmux 2>/dev/null || true
+          "'"$REPO_DIR"'/scripts/sidebar-toggle.sh" "'"r$i"':0"
+        ' >/dev/null 2>&1
+    ) &
+done
+sleep 0.5; : > "$BARRIER"
+wait 2>/dev/null
+sleep 2
+check "8 concurrent creates -> 1 sidebar"       "1" \
+      "$(tm list-panes -a -F '#{pane_title}' | grep -cx 'agent-sidebar')"
+
 if [ "$FAILURES" -ne 0 ]; then printf '\n%d check(s) failed\n' "$FAILURES"; exit 1; fi
 printf '\nall checks passed\n'

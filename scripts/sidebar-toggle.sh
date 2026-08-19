@@ -35,6 +35,47 @@ if [ -n "$TARGET" ]; then
     target_flag=(-t "$TARGET")
 fi
 
+# Under follow mode there is exactly one sidebar in the whole server, so
+# creating another here is wrong -- move the existing one instead. This also
+# neutralises the session-created auto-create without having to unregister the
+# hook: an already-registered hook from an earlier load still fires, and this
+# turns that call into a move (or a no-op) rather than a fifteenth sidebar.
+if . "$CURRENT_DIR/lib/selection-targets.sh" 2>/dev/null && sidebar_follow_enabled; then
+    _follow_target="${TARGET:-$(tmux display-message -p '#{window_id}' 2>/dev/null)}"
+
+    if _sidebar_pane_location >/dev/null 2>&1; then
+        sidebar_follow_to_window "$_follow_target"
+        exit 0
+    fi
+
+    # No sidebar yet -- but session-created fires once per session, so on a
+    # server with many sessions a dozen of these run within the same half
+    # second. Checking "does one exist" and then creating is a race: they all
+    # see none and all create. Claim the right to create with a hard link,
+    # which is atomic and fails if the target exists; losers fall through to a
+    # move once the winner's sidebar appears.
+    _claim_dir="${TMPDIR:-/tmp}"
+    _claim="$_claim_dir/.tmux-agent-status-sidebar-claim.$(id -u)"
+    _staging="$_claim.$$"
+    echo $$ > "$_staging" 2>/dev/null || true
+    if ln "$_staging" "$_claim" 2>/dev/null; then
+        rm -f "$_staging"
+        trap 'rm -f "$_claim"' EXIT
+    else
+        rm -f "$_staging"
+        # Someone else is creating it. Wait briefly for their sidebar, then move.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 0.3
+            if _sidebar_pane_location >/dev/null 2>&1; then
+                sidebar_follow_to_window "$_follow_target"
+                exit 0
+            fi
+        done
+        # Stale claim (owner died before creating one): clear it and continue.
+        rm -f "$_claim" 2>/dev/null || true
+    fi
+fi
+
 # Find sidebar pane in the target window by title.
 find_sidebar_in_window() {
     tmux list-panes "${target_flag[@]}" -F '#{pane_id} #{pane_title}' 2>/dev/null | \
