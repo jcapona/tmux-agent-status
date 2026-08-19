@@ -131,6 +131,16 @@ PATH="$TMP_DIR/bin:$PATH" bash -c '
 ' 2>/dev/null
 check "the hook script moves it too"            "$TARGET_WIN" "$(sidebar_win_of "$SIDEBAR_PANE")"
 
+# ── a manual resize survives the move ──────────────────────────────
+# Re-imposing @agent-sidebar-width on every move undid any manual resize, so a
+# sidebar narrowed by hand snapped back to the configured width on each window
+# change -- which looks like it is growing by itself.
+tm set-option -g @agent-sidebar-follow on
+tm resize-pane -t "$SIDEBAR_PANE" -x 28
+run_follow "s1:0"
+check "a hand-set width survives the move"      "28" \
+      "$(tm display-message -t "$SIDEBAR_PANE" -p '#{pane_width}')"
+
 # ── off again: stops moving ────────────────────────────────────────
 tm set-option -g @agent-sidebar-follow off
 HELD=$(sidebar_win)
