@@ -153,6 +153,15 @@ add_hook_once after-select-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-sign
 add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 add_hook_once after-switch-client "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
+
+# Follow mode: the sidebar goes where you go. Hooked to tmux's own window
+# changes rather than only the plugin's switcher, because most window switches
+# are made with prefix+n, prefix+<digit> or the window list, none of which pass
+# through selection_switch_client. Each handler is a no-op unless
+# @agent-sidebar-follow is on.
+add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
+add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
+add_hook_once client-session-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
 add_hook_once window-pane-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 
 # Nudge the collector when tmux structure or names change so cache rebuilds stay

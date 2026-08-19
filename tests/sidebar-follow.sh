@@ -117,6 +117,20 @@ HELD=$(sidebar_win_of "$SIDEBAR_PANE")
 run_follow "s1:99"
 check "nonexistent window target is ignored"    "$HELD" "$(sidebar_win_of "$SIDEBAR_PANE")"
 
+# ── the hook script drives it from tmux's own window changes ───────
+# Most window switches are prefix+n / prefix+<digit> / the window list, none of
+# which pass through selection_switch_client. Without the hook the sidebar
+# stays behind on exactly the switches people make most.
+tm set-option -g @agent-sidebar-follow on
+TARGET_WIN=$(win_of s1:2)
+SIDEBAR_TITLE=agent-sidebar \
+PATH="$TMP_DIR/bin:$PATH" bash -c '
+  tmux() { "'"$REAL_TMUX"'" -L "'"$SOCKET"'" "$@"; }
+  export -f tmux 2>/dev/null || true
+  "'"$REPO_DIR"'/scripts/sidebar-follow.sh" "'"$TARGET_WIN"'"
+' 2>/dev/null
+check "the hook script moves it too"            "$TARGET_WIN" "$(sidebar_win_of "$SIDEBAR_PANE")"
+
 # ── off again: stops moving ────────────────────────────────────────
 tm set-option -g @agent-sidebar-follow off
 HELD=$(sidebar_win)
