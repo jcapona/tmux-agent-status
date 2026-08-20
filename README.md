@@ -1,12 +1,14 @@
 # tmux-agent-status
 
-Sidebar-first AI agent session manager for tmux. It gives each tmux session a persistent status sidebar, adds a hierarchical `fzf` target switcher for fast jumps and cleanup across agent sessions, windows, and panes, and can optionally keep a compact summary in the status line.
+Sidebar-first AI agent session manager for tmux. It keeps a persistent status sidebar wherever you want it -- per session, per window, or a single one that follows you -- adds a hierarchical `fzf` target switcher for fast jumps and cleanup across agent sessions, windows, and panes, and can optionally keep a compact summary in the status line.
 
 Claude Code and Codex CLI are both integrated through hooks, so their states come from agent lifecycle events rather than fragile process polling. Custom agents can still integrate through status files or collector extensions.
 
 ## Features
 
-- Persistent sidebar per session, or in every window with `@agent-sidebar-per-window`
+- Persistent status sidebar, in one of three placements: one per session (default),
+  one per window (`@agent-sidebar-per-window`), or a single sidebar that follows your
+  jumps (`@agent-sidebar-follow`) for one renderer process in total
 - Hierarchical `fzf` target switcher for quick jumps and close actions
 - Hook-based Claude Code and Codex tracking
 - Wait and park modes for triaging work
@@ -80,14 +82,17 @@ Integrate any AI coding tool with either of these approaches:
 
 Default mode is sidebar-first:
 
-- Every tmux session gets a sidebar pane automatically
+- Every tmux session gets a sidebar pane automatically (not under
+  `@agent-sidebar-follow`, where a single sidebar is opened once and then follows you)
 - `prefix + S` opens the hierarchical `fzf` target switcher
-- `prefix + O` toggles the sidebar in the current window (opens it, or closes it when already visible)
+- `prefix + O` toggles the sidebar in the current window (opens it, or closes it when
+  already visible). Under `@agent-sidebar-follow` it also summons the single sidebar
+  here when it is in another window
 
 | Key | Action |
 |-----|--------|
 | `prefix + S` | Open the hierarchical `fzf` target switcher |
-| `prefix + O` | Toggle the sidebar: opens it, closes it when already visible |
+| `prefix + O` | Toggle the sidebar: opens it, closes it when already visible, or summons it here under follow mode |
 | `prefix + N` | Jump to the next inbox item in inbox order |
 | `prefix + W` | Put the current session or pane into timed wait mode |
 | `prefix + P` | Park the current session or pane for later |
@@ -133,6 +138,7 @@ Inside the popup switcher:
 Inside the sidebar:
 
 - `x`, `p`, and `w` perform the same close, park, and wait actions without interfering with popup search input
+- `m` toggles between tree and agents view (rebind with `@agent-sidebar-mode-key`)
 
 `prefix + N` follows the same top-to-bottom order as the `INBOX` section. The inbox is ordered by session name, then by tmux window order within each session.
 
@@ -162,13 +168,41 @@ set -g @agent-status-line "off"            # off | on
 
 set -g @agent-switcher-style "both"        # popup | sidebar | both
 set -g @agent-status-display-method "popup" # popup | window
+# Sidebar width. Re-asserted whenever a window is reflowed (a pane opening or
+# closing redistributes every pane in the window), so the sidebar keeps this
+# width instead of drifting to whatever share the layout gives it. Ignored for
+# a window too narrow to give it without squeezing everything else.
+#
+# Note that this makes the option authoritative: resizing the sidebar by hand
+# holds until the next time a pane opens or closes in that window, at which
+# point it returns to this width. Set the option rather than dragging the
+# border if you want a different width to stick.
 set -g @agent-sidebar-width "42"
 
-# Every window gets its own sidebar (default). A sidebar is a pane, so it lives
-# in exactly one window -- one per session means it vanishes the moment you
-# switch windows. Off (the default) runs one renderer per session. Set "on"
-# for one sidebar per window, which costs a renderer process per window.
+# A sidebar is a pane, so it lives in exactly one window. Off (the default) runs
+# one renderer per session, which means it is only in the window it was opened
+# in. Set "on" for one sidebar per window, at the cost of a renderer process per
+# window. See @agent-sidebar-follow below for the third option: exactly one
+# sidebar that moves to wherever you are.
 set -g @agent-sidebar-per-window "off"     # off | on
+
+# Follow mode: exactly one sidebar for the whole server, which moves to the
+# window you jump to -- across sessions as well as windows. The pane is moved
+# with join-pane, so the renderer is carried along rather than restarted, and
+# one process covers everything. Jumps between panes of the same window do
+# nothing.
+#
+#   on      follow jumps made through the sidebar or the switcher -- pressing
+#           Enter on a row takes the sidebar with you. A plain window change
+#           (prefix+n, prefix+<digit>, the window list) leaves it where it is.
+#   always  also follow plain window changes, so the sidebar is wherever you
+#           are no matter how you got there.
+#
+# Follow mode owns placement, so it disables the per-session auto-create: open
+# the sidebar once (prefix + O) and it follows from then on. prefix + O also
+# summons it from another window, and still closes it when it is already here.
+# This makes @agent-sidebar-per-window irrelevant.
+set -g @agent-sidebar-follow "off"         # off | on | always
 
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by

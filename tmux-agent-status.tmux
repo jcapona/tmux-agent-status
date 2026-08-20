@@ -158,6 +158,15 @@ add_hook_once after-select-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-sign
 add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh refresh'"
 
+# Follow mode: the sidebar goes where you go. Hooked to tmux's own window
+# changes rather than only the plugin's switcher, because most window switches
+# are made with prefix+n, prefix+<digit> or the window list, none of which pass
+# through selection_switch_client. Each handler is a no-op unless
+# @agent-sidebar-follow is on.
+add_hook_once after-select-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
+add_hook_once session-window-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
+add_hook_once client-session-changed "run-shell -b '$CURRENT_DIR/scripts/sidebar-follow.sh #{window_id}'"
+
 # Nudge the collector when tmux structure or names change so cache rebuilds stay
 # event-driven instead of waiting for a fallback poll.
 add_hook_once session-created "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
@@ -169,6 +178,14 @@ add_hook_once after-kill-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal
 add_hook_once after-resize-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-resize-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-select-layout "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
+
+# Keep the sidebar at its configured width: the same reflow events, since tmux
+# redistributes every pane in a window when one opens or closes.
+add_hook_once after-split-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once after-kill-pane "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once after-resize-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once after-select-layout "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
+add_hook_once client-resized "run-shell -b '$CURRENT_DIR/scripts/sidebar-width.sh'"
 add_hook_once after-new-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once window-unlinked "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
 add_hook_once after-rename-window "run-shell -b '$CURRENT_DIR/scripts/sidebar-signal.sh collect'"
@@ -191,7 +208,19 @@ esac
 # tmux-resurrect restores and how most scripted sessions start) is not in the
 # new session at all -- so the sidebar landed in whatever window happened to be
 # focused, and the new session silently got none.
-add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
+# Follow mode owns placement: there is exactly one sidebar and it moves to
+# wherever you are. Auto-creating one per session would defeat that -- you would
+# get N sidebars, each shuffling within its own session, which is what
+# per-session already does. So the auto-create is skipped when follow is on; the
+# single sidebar is opened once, by hand, and then follows.
+case "$(tmux show-option -gqv "@agent-sidebar-follow")" in
+    1|on|true|yes) sidebar_follow=1 ;;
+    *)             sidebar_follow=0 ;;
+esac
+
+if [ "$sidebar_follow" -eq 0 ]; then
+    add_hook_once session-created "run-shell -b 'sleep 0.5 && $CURRENT_DIR/scripts/sidebar-toggle.sh #{window_id}'"
+fi
 
 # after-new-window does not fire for a session's first window, so this covers
 # windows 2..n and the session-created hook above covers the first.

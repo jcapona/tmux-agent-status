@@ -25,6 +25,22 @@ if [ "${1:-}" = "--toggle" ]; then
 fi
 TARGET="${1:-}"
 
+# Launch the renderer under a Bash 4 interpreter directly rather than letting
+# its shebang pick /bin/bash and re-exec. On macOS /bin/bash is 3.2, so
+# require-bash4.sh execs the script again under Homebrew bash -- two process
+# startups for one sidebar, measured at ~44ms of a ~162ms first paint. The
+# guard stays in place for anyone running the script by hand.
+_renderer_cmd() {
+    local b4=""
+    if . "$CURRENT_DIR/lib/require-bash4.sh" 2>/dev/null \
+       && b4="$(_tmux_agent_status_find_bash4 2>/dev/null)" && [ -n "$b4" ]; then
+        printf '%s %s' "$b4" "$CURRENT_DIR/sidebar.sh"
+    else
+        printf '%s' "$CURRENT_DIR/sidebar.sh"
+    fi
+}
+RENDERER="$(_renderer_cmd)"
+
 # Read configured width.
 width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
 [ -z "$width" ] && width=42
@@ -33,6 +49,56 @@ width=$(tmux show-option -gqv "@agent-sidebar-width" 2>/dev/null)
 target_flag=()
 if [ -n "$TARGET" ]; then
     target_flag=(-t "$TARGET")
+fi
+
+# Under follow mode there is exactly one sidebar in the whole server, so
+# creating another here is wrong -- move the existing one instead. This also
+# neutralises the session-created auto-create without having to unregister the
+# hook: an already-registered hook from an earlier load still fires, and this
+# turns that call into a move (or a no-op) rather than a fifteenth sidebar.
+if . "$CURRENT_DIR/lib/selection-targets.sh" 2>/dev/null && sidebar_follow_enabled; then
+    _follow_target="${TARGET:-$(tmux display-message -p '#{window_id}' 2>/dev/null)}"
+
+    _found=$(_sidebar_pane_location 2>/dev/null || true)
+    if [ -n "$_found" ]; then
+        _here=$(tmux display-message -t "$_follow_target" -p '#{window_id}' 2>/dev/null || true)
+        if [ "${_found##* }" = "$_here" ]; then
+            # It is already in this window. Summoning would be a no-op and would
+            # swallow --toggle, leaving no way to close it. Fall through to the
+            # normal toggle path so prefix+O still closes what it opened.
+            :
+        else
+            sidebar_follow_to_window "$_follow_target"
+            exit 0
+        fi
+    fi
+
+    # No sidebar yet -- but session-created fires once per session, so on a
+    # server with many sessions a dozen of these run within the same half
+    # second. Checking "does one exist" and then creating is a race: they all
+    # see none and all create. Claim the right to create with a hard link,
+    # which is atomic and fails if the target exists; losers fall through to a
+    # move once the winner's sidebar appears.
+    _claim_dir="${TMPDIR:-/tmp}"
+    _claim="$_claim_dir/.tmux-agent-status-sidebar-claim.$(id -u)"
+    _staging="$_claim.$$"
+    echo $$ > "$_staging" 2>/dev/null || true
+    if ln "$_staging" "$_claim" 2>/dev/null; then
+        rm -f "$_staging"
+        trap 'rm -f "$_claim"' EXIT
+    else
+        rm -f "$_staging"
+        # Someone else is creating it. Wait briefly for their sidebar, then move.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            sleep 0.3
+            if _sidebar_pane_location >/dev/null 2>&1; then
+                sidebar_follow_to_window "$_follow_target"
+                exit 0
+            fi
+        done
+        # Stale claim (owner died before creating one): clear it and continue.
+        rm -f "$_claim" 2>/dev/null || true
+    fi
 fi
 
 # Find sidebar pane in the target window by title.
@@ -72,7 +138,7 @@ else
     if [ -n "$file_sidebar" ]; then
         # File manager is open — split below it (inherits the same width).
         new_pane=$(tmux split-window -v -t "$file_sidebar" \
-            -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
+            -PF '#{pane_id}' "$RENDERER")
     else
         # No file manager — create a left-side split spanning the whole window.
         #
@@ -84,7 +150,7 @@ else
         # and subsequent splits divide only the remaining area.
         leftmost=$(tmux list-panes "${target_flag[@]}" -F '#{pane_left} #{pane_id}' | sort -n | head -1 | awk '{print $2}')
         new_pane=$(tmux split-window -fhb -l "$width" -t "$leftmost" \
-            -PF '#{pane_id}' "$CURRENT_DIR/sidebar.sh")
+            -PF '#{pane_id}' "$RENDERER")
     fi
 
     # Tag the pane so we can find it later.

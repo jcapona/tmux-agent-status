@@ -1127,6 +1127,26 @@ action_park() {
     _LAST_STATUS_MTIME=""
 }
 
+# ─── First paint ──────────────────────────────────────────────────
+# Paint before collecting anything. Startup is ~120ms -- bash, four sourced
+# libs, then a collect and a full render -- and for all of it the pane sits
+# blank, so opening the sidebar reads as two events: a bare pane appearing, and
+# content arriving. Clearing and drawing the frame immediately costs nothing
+# measurable and makes the pane look intentional from the first frame; the rows
+# then fill in where an empty frame already was.
+#
+# Only in pane mode: preview mode renders into a popup that is already framed.
+if (( ! PREVIEW_MODE )); then
+    {
+        _fp_w=$( { read -r _ _c < <(stty size 2>/dev/null); echo "${_c:-30}"; } )
+        printf '\033[2J\033[H'
+        printf '%s' "${DIM}"
+        printf '\u2500%.0s' $(seq 1 "$_fp_w")
+        printf '%s' "${RST}"
+        unset _fp_w _c
+    } 2>/dev/null || true
+fi
+
 # ─── Main loop ────────────────────────────────────────────────────
 NEEDS_COLLECT=1
 NEEDS_RENDER=1
@@ -1234,8 +1254,13 @@ while true; do
         _handle_escape() {
             read -rsn2 -t 0.1 seq
             case "$seq" in
-                '[A') (( SELECTED > SESS_START )) && ((SELECTED--)); return 0 ;;
-                '[B') (( SELECTED < SEL_COUNT - 1 )) && ((SELECTED++)); return 0 ;;
+                # Both encodings: a terminal in application cursor mode (DECCKM)
+                # sends SS3 -- ESC O A -- rather than CSI -- ESC [ A. Handling
+                # only the CSI form left the arrow keys dead wherever that mode
+                # was on, while j/k kept working, which reads as "arrows do
+                # nothing in the sidebar".
+                '[A'|'OA') (( SELECTED > SESS_START )) && ((SELECTED--)); return 0 ;;
+                '[B'|'OB') (( SELECTED < SEL_COUNT - 1 )) && ((SELECTED++)); return 0 ;;
                 '[<')
                     # SGR mouse: read "button;x;yM" or "button;x;ym"
                     local mdata="" mc=""
@@ -1264,7 +1289,23 @@ while true; do
                     return 0
                     ;;
             esac
-            return 1  # unhandled
+            # A sequence we do not act on -- Left, Right, Home, End, PageUp, function
+            # keys. It must still be reported as consumed: the caller treats "not
+            # handled" as a bare Esc and exits, so pressing Left closed the sidebar.
+            if [ -n "$seq" ]; then
+                # Drain the rest of a longer sequence (Home is ESC [ 1 ~) so its
+                # trailing bytes are not read as keystrokes and trigger actions.
+                case "$seq" in
+                    '['[0-9]*)
+                        local _tail=""
+                        while read -rsn1 -t 0.05 _tail; do
+                            case "$_tail" in [A-Za-z~]) break ;; esac
+                        done
+                        ;;
+                esac
+                return 0
+            fi
+            return 1  # a bare Esc, with nothing following
         }
 
         if (( WAIT_INPUT_ACTIVE )); then
