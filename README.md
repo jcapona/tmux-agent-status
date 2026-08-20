@@ -160,58 +160,43 @@ set -g @agent-wait-key "W"
 set -g @agent-park-key "P"
 
 # Compact glyph summary in tmux's status line. Off by default: the sidebar and
-# the switcher already show agent state, and status-right is usually already
-# spent on other modules. Turning it on also sets status-interval to 1 so the
-# glyphs animate; turning it back off removes the module on the next config
-# reload, but leaves status-interval where it is.
+# switcher already show this. Turning it on sets status-interval to 1 so the
+# glyphs animate; turning it off again leaves status-interval where it is.
 set -g @agent-status-line "off"            # off | on
 
 set -g @agent-switcher-style "both"        # popup | sidebar | both
 set -g @agent-status-display-method "popup" # popup | window
-# Sidebar width. Re-asserted whenever a window is reflowed (a pane opening or
-# closing redistributes every pane in the window), so the sidebar keeps this
-# width instead of drifting to whatever share the layout gives it. Ignored for
-# a window too narrow to give it without squeezing everything else.
-#
-# Note that this makes the option authoritative: resizing the sidebar by hand
-# holds until the next time a pane opens or closes in that window, at which
-# point it returns to this width. Set the option rather than dragging the
-# border if you want a different width to stick.
+# Sidebar width, re-asserted whenever a window reflows -- so it holds instead of
+# drifting, and a manual drag does not stick. Ignored on windows too narrow to
+# give it without squeezing everything else.
 set -g @agent-sidebar-width "42"
 
-# A sidebar is a pane, so it lives in exactly one window. Off (the default) runs
-# one renderer per session, which means it is only in the window it was opened
-# in. Set "on" for one sidebar per window, at the cost of a renderer process per
-# window. See @agent-sidebar-follow below for the third option: exactly one
-# sidebar that moves to wherever you are.
+# A sidebar is a pane, so it lives in one window. Off (default) is one per
+# session, present only in the window it was opened in; "on" is one per window,
+# at a renderer process each. See @agent-sidebar-follow for a third option.
 set -g @agent-sidebar-per-window "off"     # off | on
 
-# Follow mode: exactly one sidebar for the whole server, which moves to the
-# window you jump to -- across sessions as well as windows. The pane is moved
-# with join-pane, so the renderer is carried along rather than restarted, and
-# one process covers everything. Jumps between panes of the same window do
-# nothing.
-#
-#   on      follow jumps made through the sidebar or the switcher -- pressing
-#           Enter on a row takes the sidebar with you. A plain window change
-#           (prefix+n, prefix+<digit>, the window list) leaves it where it is.
-#   always  also follow plain window changes, so the sidebar is wherever you
-#           are no matter how you got there.
-#
-# Follow mode owns placement, so it disables the per-session auto-create: open
-# the sidebar once (prefix + O) and it follows from then on. prefix + O also
-# summons it from another window, and still closes it when it is already here.
-# This makes @agent-sidebar-per-window irrelevant.
+# One sidebar for the whole server, moved with join-pane to the window you jump
+# to, so the renderer is carried rather than restarted. Disables the per-session
+# auto-create: open it once with prefix+O and it follows; prefix+O also summons
+# it from elsewhere. Makes @agent-sidebar-per-window irrelevant.
+#   on      sidebar and switcher jumps only
+#   always  also plain window changes (prefix+n, prefix+<digit>, window list)
 set -g @agent-sidebar-follow "off"         # off | on | always
+
+# Minutes without the pane's screen changing before a "working" status stops
+# being believed -- hooks push state and nothing expires it, so a Stop that
+# never fires would leave a pane working forever. Such a pane shows as unknown,
+# never as done. Only ever downgrades; hooks alone set state. 0 disables.
+set -g @agent-stale-working-minutes "20"
 
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by
 # window index rather than by whichever agent was found first.
 set -g @agent-show-all-windows "off"       # off | on
 
-# Totals row at the very top of the sidebar (working / done / waiting across
-# every session). Off by default -- the same counts appear per session in the
-# tree below, and the row costs a line of an already narrow pane.
+# Totals row at the top of the sidebar (working / done / waiting, all sessions).
+# Off by default: the same counts appear per session in the tree below.
 set -g @agent-sidebar-header "off"         # off | on
 
 # Install missing agent hooks on load instead of only reporting them. Nothing
