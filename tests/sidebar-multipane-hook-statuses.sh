@@ -86,8 +86,8 @@ HOME="$TEST_HOME" \
 "$REPO_DIR/scripts/sidebar-collector.sh" --once >/dev/null
 
 CACHE_FILE="$STATUS_DIR/.sidebar-cache"
-assert_contains $'PC:codex-multipane:1:1:0' "$CACHE_FILE" "multi-pane counts should include both hook-tracked panes"
-assert_contains $'R:S|codex-multipane|working||\tcodex-multipane\tS' "$CACHE_FILE" "session row should stay working while any child pane is working"
+assert_contains $'PC:codex-multipane:1:1' "$CACHE_FILE" "multi-pane counts should include both hook-tracked panes"
+assert_contains $'R:S|codex-multipane|working|\tcodex-multipane\tS' "$CACHE_FILE" "session row should stay working while any child pane is working"
 assert_contains $'R:P|codex-multipane|%0|codex|working|' "$CACHE_FILE" "working pane should appear as a child sidebar row"
 assert_contains $'R:P|codex-multipane|%4|codex|done|' "$CACHE_FILE" "done pane should appear as a child sidebar row"
 

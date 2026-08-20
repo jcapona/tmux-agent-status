@@ -48,8 +48,6 @@ check "the 15-hour case is caught"       "idle"    "$(resolve working 9480 $T)"
 # It must never invent completion, and never touch other states.
 check "stale working becomes idle, not done" "idle"   "$(resolve working 99999 $T)"
 check "done is left alone"                   "done"   "$(resolve done 99999 $T)"
-check "wait is left alone"                   "wait"   "$(resolve wait 99999 $T)"
-check "parked is left alone"                 "parked" "$(resolve parked 99999 $T)"
 
 # 0 disables the check entirely, restoring pure hook-driven state.
 check "0 disables the rule"                  "working" "$(resolve working 99999 0)"

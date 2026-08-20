@@ -5,22 +5,16 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Default key bindings
 default_switcher_key="S"
 default_next_done_key="N"
-default_wait_key="W"
 # Uppercase throughout: tmux binds `p` to previous-window and `o` to
 # select-pane by default, and a plugin silently taking those over is a
 # surprise every user has to undo by hand.
-default_park_key="P"
 
 # Get user configuration or use defaults.
 switcher_key=$(tmux show-option -gqv "@agent-status-key")
 next_done_key=$(tmux show-option -gqv "@agent-next-done-key")
-wait_key=$(tmux show-option -gqv "@agent-wait-key")
-park_key=$(tmux show-option -gqv "@agent-park-key")
 
 [ -z "$switcher_key" ] && switcher_key="$default_switcher_key"
 [ -z "$next_done_key" ] && next_done_key="$default_next_done_key"
-[ -z "$wait_key" ] && wait_key="$default_wait_key"
-[ -z "$park_key" ] && park_key="$default_park_key"
 
 # Default switcher view: "tree" (hierarchical session/window/pane, default)
 # or "agents" (flat list of every agent pane). Toggle mid-session with ctrl-f.
@@ -81,12 +75,6 @@ esac
 # Set up keybinding to switch to next done project
 tmux bind-key "$next_done_key" run-shell "$CURRENT_DIR/scripts/next-done-project.sh"
 
-# Set up keybinding to put session in wait mode
-tmux bind-key "$wait_key" run-shell "$CURRENT_DIR/scripts/wait-session.sh"
-
-# Set up keybinding to park a session for later
-tmux bind-key "$park_key" run-shell "$CURRENT_DIR/scripts/park-session.sh"
-
 # Detect iTerm2 Control Mode (tmux -CC) and skip status polling / daemons
 # to avoid interfering with the control protocol. Keybindings above are fine.
 control_mode=$(tmux display-message -p '#{client_control_mode}' 2>/dev/null)
@@ -126,7 +114,6 @@ fi
 # tmux has no idempotent set-hook: `-ga` appends unconditionally, so every
 # config reload stacks another copy. Reloading often leaves dozens of duplicates
 # (observed: 84 entries on session-created after ~28 reloads, which fired
-# daemon-monitor.sh 28 times per new session). Plain `-g` is not an option --
 # it replaces the whole array and would silently delete hooks the user or other
 # plugins registered on the same event.
 #
@@ -146,9 +133,6 @@ add_hook_once() {
     fi
 }
 
-# Set up daemon monitor to ensure smart-monitor is always running
-# Start daemon monitor on session created
-add_hook_once session-created "run-shell '$CURRENT_DIR/scripts/daemon-monitor.sh'"
 
 # Sidebars are event-driven: wake them when tmux client focus changes so they
 # can refresh ACTIVE markers without polling in the pane process.
@@ -263,7 +247,6 @@ fi
 
 # Also start it now if tmux is already running
 if tmux list-sessions >/dev/null 2>&1; then
-    "$CURRENT_DIR/scripts/daemon-monitor.sh" >/dev/null 2>&1
 
     # Backfill anything that has no sidebar yet: every window when per-window
     # is on, otherwise one per session as before. Read line by line so session
