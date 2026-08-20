@@ -83,6 +83,20 @@ _show_all_windows() {
     esac
 }
 
+# Minutes of window silence after which a "working" status stops being
+# believed. Generous by default: an agent can legitimately spend a long time on
+# one step, but it prints *something* while doing so -- a spinner, a tool
+# result, a token. Silence for this long means the work ended without a Stop
+# hook firing. 0 disables the check and restores pure hook-driven state.
+_stale_working_secs() {
+    local m
+    m="$(tmux show-option -gqv "@agent-stale-working-minutes" 2>/dev/null)"
+    case "$m" in
+        ''|*[!0-9]*) m=20 ;;
+    esac
+    echo $(( m * 60 ))
+}
+
 # ─── Main collection ──────────────────────────────────────────────
 collect_data() {
     expire_wait_timers >/dev/null
@@ -120,6 +134,8 @@ collect_data() {
 
     local now
     printf -v now '%(%s)T' -1
+    local STALE_WORKING_SECS
+    STALE_WORKING_SECS=$(_stale_working_secs)
 
     # ── 1+2. Session + pane data (single tmux call) ────────────
     declare -A sess_state sess_extra sess_ssh sess_seen
@@ -129,10 +145,11 @@ collect_data() {
     declare -A pane_to_window    # pane_id → window_index
     declare -A VISIBLE_PANES=()  # pane_id → 1 when on screen for some client
     declare -A window_names      # session:window_index → window_name
+    declare -A pane_last_output  # pane_id → unix ts of its window's last output
     local all_pane_pids=""
 
     local _tab=$'\t'
-    while IFS=$'\t' read -r sname pane_id pcwd ppid win_idx win_name win_active sess_attached; do
+    while IFS=$'\t' read -r sname pane_id pcwd ppid win_idx win_name win_active sess_attached win_act; do
         [ -z "$sname" ] && continue
 
         # A pane is visible only if its window is the current one in its
@@ -141,6 +158,12 @@ collect_data() {
         if [ "${win_active:-0}" = "1" ] && [ "${sess_attached:-0}" != "0" ]; then
             VISIBLE_PANES[$pane_id]=1
         fi
+
+        # tmux's own record of when this window last produced output. It is the
+        # closest thing tmux offers to the pty-activity signal a multiplexer
+        # that owns the pty would use, and it comes free with an enumeration we
+        # already make. Window-level: tmux has no #{pane_activity}.
+        [ -n "${win_act:-}" ] && pane_last_output[$pane_id]="$win_act"
 
         [[ -z "${sess_cwd[$sname]:-}" ]] && sess_cwd[$sname]="$pcwd"
         pane_to_session[$ppid]="$sname"
@@ -188,7 +211,7 @@ collect_data() {
         sess_state[$sname]="$state"
         sess_extra[$sname]="$extra"
         sess_ssh[$sname]="$is_ssh"
-    done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}${_tab}#{window_active}${_tab}#{session_attached}" 2>/dev/null)
+    done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}${_tab}#{window_active}${_tab}#{session_attached}${_tab}#{window_activity}" 2>/dev/null)
 
     # ── 3. Worktree detection ────────────────────────────────────
     declare -A worktree_parent worktree_children
@@ -303,6 +326,28 @@ collect_data() {
                 pane_status="wait"
             fi
         fi
+        # A "working" status that the window contradicts.
+        #
+        # State is pushed by hooks and nothing expires it, so a Stop that never
+        # fires -- an agent killed, interrupted, or whose hook is broken --
+        # leaves "working" set forever. Observed in the wild at 158 minutes,
+        # with the agent process alive and idle, so process liveness does not
+        # catch it either.
+        #
+        # tmux knows when the window last produced output. An agent that is
+        # genuinely working prints something; one that has printed nothing for
+        # many minutes is not working, whatever its status file claims. Resolve
+        # to "idle" rather than "done": the honest statement is "no longer
+        # believable", not "finished", and "done" would fire the completion
+        # sound and show a tick for work that may never have completed.
+        if [ "$pane_status" = "working" ] && (( STALE_WORKING_SECS > 0 )); then
+            local _last="${pane_last_output[$pid_id]:-}"
+            if [ -n "$_last" ] && (( _last > 0 )) \
+               && (( now - _last > STALE_WORKING_SECS )); then
+                pane_status="idle"
+            fi
+        fi
+
         if [ -z "$pane_status" ]; then
             if [ -n "${_sess_has_pane_status[$owner]:-}" ]; then
                 # Tracked session, silent pane: unknown. Renders as a dim dot,

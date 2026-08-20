@@ -204,6 +204,20 @@ set -g @agent-sidebar-per-window "off"     # off | on
 # This makes @agent-sidebar-per-window irrelevant.
 set -g @agent-sidebar-follow "off"         # off | on | always
 
+# Minutes of window silence after which a "working" status stops being believed.
+#
+# State is pushed by agent hooks and nothing expires it, so a Stop hook that
+# never fires -- an agent killed, interrupted, or whose hook path broke --
+# leaves a pane marked "working" indefinitely. tmux records when a window last
+# produced output, and an agent that is genuinely working prints something, so
+# prolonged silence contradicts the status.
+#
+# Such a pane is shown as unknown (a dim dot), never as done: the honest claim
+# is "no longer believable", not "finished". Set 0 to disable and rely purely on
+# hooks. Note this is window-level -- tmux has no per-pane activity -- so a
+# window holding two agents is judged by whichever produced output last.
+set -g @agent-stale-working-minutes "20"
+
 # By default only windows containing a recognised agent are listed. On also
 # lists windows with no agent (shown with a dim dot), and orders windows by
 # window index rather than by whichever agent was found first.
