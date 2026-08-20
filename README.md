@@ -204,18 +204,28 @@ set -g @agent-sidebar-per-window "off"     # off | on
 # This makes @agent-sidebar-per-window irrelevant.
 set -g @agent-sidebar-follow "off"         # off | on | always
 
-# Minutes of window silence after which a "working" status stops being believed.
+# Minutes without the pane's screen changing, after which a "working" status
+# stops being believed.
 #
 # State is pushed by agent hooks and nothing expires it, so a Stop hook that
 # never fires -- an agent killed, interrupted, or whose hook path broke --
-# leaves a pane marked "working" indefinitely. tmux records when a window last
-# produced output, and an agent that is genuinely working prints something, so
-# prolonged silence contradicts the status.
+# leaves a pane marked "working" indefinitely. An agent that is genuinely
+# working repaints its pane (a spinner, a token counter, tool output); one that
+# has finished holds a static prompt. A screen that has not changed in this long
+# therefore contradicts the status.
 #
 # Such a pane is shown as unknown (a dim dot), never as done: the honest claim
 # is "no longer believable", not "finished". Set 0 to disable and rely purely on
-# hooks. Note this is window-level -- tmux has no per-pane activity -- so a
-# window holding two agents is judged by whichever produced output last.
+# hooks.
+#
+# Hooks remain the only thing that *sets* state. This check can only ever
+# downgrade "working" to unknown -- it cannot mark a pane working, done or
+# waiting, because a changing screen does not prove the agent is the one
+# changing it.
+#
+# Cost is negligible: only panes already claiming "working" are sampled, only
+# every 10 seconds, and only their last 8 lines. Measured against a workload of
+# nine simultaneously working agents, the difference was inside the noise.
 set -g @agent-stale-working-minutes "20"
 
 # By default only windows containing a recognised agent are listed. On also

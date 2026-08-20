@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 #
-# A "working" status is disbelieved when its window has produced no output for
-# a long time.
+# A "working" status is disbelieved when the pane's own screen stops changing.
 #
 # State is pushed by hooks and nothing expires it, so a Stop that never fires
-# leaves "working" set forever -- observed at 158 minutes with the agent process
-# alive and idle, which is why process liveness does not catch this. tmux's
-# #{window_activity} records when a window last produced output, and an agent
-# that is genuinely working prints something.
+# leaves "working" set forever -- observed at 908 minutes with the agent process
+# alive and idle, which is why process liveness does not catch this.
+#
+# #{window_activity} was tried first and is too coarse: window-level, so a shell
+# in the same window -- or follow mode joining the sidebar in or out of it --
+# resets the clock. Measured directly: a pane 903 minutes stale sat in a window
+# reporting output 1 minute ago. The pane's own visible text is the per-pane
+# equivalent, and an agent that is working repaints.
 #
 # The rule resolves to "idle", never "done": the honest claim is "no longer
 # believable", not "finished".
@@ -20,11 +23,11 @@ check() {
     else printf '  FAIL  %s\n        expected: %s\n        actual:   %s\n' "$1" "$2" "$3"; FAILURES=$((FAILURES+1)); fi
 }
 
-echo "stale-working-activity"
+echo "stale-working-screen"
 
 # The rule itself. Standing up the whole collector would exercise the tmux
 # plumbing rather than the decision, and the decision is what can be wrong.
-resolve() { # resolve <status> <secs-since-window-output> <threshold-secs>
+resolve() { # resolve <status> <secs-since-screen-changed> <threshold-secs>
     local pane_status="$1" age="$2" STALE_WORKING_SECS="$3"
     local now=1000000 _last=$(( 1000000 - age ))
     if [ "$pane_status" = "working" ] && (( STALE_WORKING_SECS > 0 )); then
@@ -37,10 +40,10 @@ resolve() { # resolve <status> <secs-since-window-output> <threshold-secs>
 
 T=1200   # 20 minutes
 
-check "fresh output keeps working"          "working" "$(resolve working 10 $T)"
+check "a changing screen keeps working"          "working" "$(resolve working 10 $T)"
 check "just under the threshold holds"      "working" "$(resolve working 1199 $T)"
 check "past the threshold is disbelieved"   "idle"    "$(resolve working 1201 $T)"
-check "the 158-minute case is caught"       "idle"    "$(resolve working 9480 $T)"
+check "the 15-hour case is caught"       "idle"    "$(resolve working 9480 $T)"
 
 # It must never invent completion, and never touch other states.
 check "stale working becomes idle, not done" "idle"   "$(resolve working 99999 $T)"
@@ -61,7 +64,7 @@ resolve_noact() {
     fi
     printf '%s' "$pane_status"
 }
-check "a missing timestamp is not stale"     "working" "$(resolve_noact)"
+check "an unseen pane is not stale"     "working" "$(resolve_noact)"
 
 if [ "$FAILURES" -ne 0 ]; then printf '\n%d check(s) failed\n' "$FAILURES"; exit 1; fi
 printf '\nall checks passed\n'

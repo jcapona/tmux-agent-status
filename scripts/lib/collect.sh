@@ -97,6 +97,61 @@ _stale_working_secs() {
     echo $(( m * 60 ))
 }
 
+# ─── Screen-change tracking for stale "working" ───────────────────
+# Persist across collect_data calls: the collector sources this once and loops.
+declare -A _SCREEN_HASH=()   # pane key → hash of its visible tail
+declare -A _SCREEN_TS=()     # pane key → when that hash last changed
+_SCREEN_LAST_SAMPLE=0
+
+# How often to look. Every cycle would mean a capture-pane per working pane per
+# second; the question being answered ("has this screen changed in the last
+# twenty minutes") does not need that resolution.
+_SCREEN_SAMPLE_SECS=10
+
+# Sample the panes that claim to be working, and record when each last changed.
+#
+# Window activity (#{window_activity}) was tried first and is too coarse: it is
+# window-level, so a shell in the same window, or the sidebar being joined in or
+# out of it by follow mode, resets the clock and masks a stale pane. Observed
+# directly -- a pane whose status file was 903 minutes old sat in a window
+# reporting output 1 minute ago.
+#
+# The pane's own visible text is the per-pane equivalent. An agent that is
+# working repaints -- a spinner, a token counter, a tool result; an idle one
+# holds a static prompt. Only the tail is hashed, and only for panes that claim
+# to be working, so the usual cost is nothing.
+_sample_working_screens() {
+    local now="$1" pane_dir="$2"; shift 2
+    (( now - _SCREEN_LAST_SAMPLE < _SCREEN_SAMPLE_SECS )) && return 0
+    _SCREEN_LAST_SAMPLE="$now"
+
+    local key pane h
+    for key in "$@"; do
+        pane="${key#*:}"
+        h=$(tmux capture-pane -p -t "$pane" -S -8 2>/dev/null | cksum 2>/dev/null | awk '{print $1}')
+        [ -z "$h" ] && continue
+        if [ -z "${_SCREEN_HASH[$key]:-}" ]; then
+            # First sight of this pane. Starting its clock at "now" would give
+            # every stale pane a fresh grace period on each collector restart --
+            # and reloads are frequent, so a status stuck for fifteen hours came
+            # back as "working" every time. The status file's mtime is the last
+            # moment a hook said anything about this pane, which is a strictly
+            # better estimate of when it was last really doing something.
+            local _seed_file="$pane_dir/${key%%:*}_${key#*:}.status"
+            if [ -f "$_seed_file" ]; then
+                _SCREEN_TS[$key]=$(stat -f %m "$_seed_file" 2>/dev/null \
+                                   || stat -c %Y "$_seed_file" 2>/dev/null || echo "$now")
+            else
+                _SCREEN_TS[$key]="$now"
+            fi
+            _SCREEN_HASH[$key]="$h"
+        elif [ "${_SCREEN_HASH[$key]}" != "$h" ]; then
+            _SCREEN_HASH[$key]="$h"
+            _SCREEN_TS[$key]="$now"
+        fi
+    done
+}
+
 # ─── Main collection ──────────────────────────────────────────────
 collect_data() {
     expire_wait_timers >/dev/null
@@ -145,11 +200,10 @@ collect_data() {
     declare -A pane_to_window    # pane_id → window_index
     declare -A VISIBLE_PANES=()  # pane_id → 1 when on screen for some client
     declare -A window_names      # session:window_index → window_name
-    declare -A pane_last_output  # pane_id → unix ts of its window's last output
     local all_pane_pids=""
 
     local _tab=$'\t'
-    while IFS=$'\t' read -r sname pane_id pcwd ppid win_idx win_name win_active sess_attached win_act; do
+    while IFS=$'\t' read -r sname pane_id pcwd ppid win_idx win_name win_active sess_attached; do
         [ -z "$sname" ] && continue
 
         # A pane is visible only if its window is the current one in its
@@ -158,12 +212,6 @@ collect_data() {
         if [ "${win_active:-0}" = "1" ] && [ "${sess_attached:-0}" != "0" ]; then
             VISIBLE_PANES[$pane_id]=1
         fi
-
-        # tmux's own record of when this window last produced output. It is the
-        # closest thing tmux offers to the pty-activity signal a multiplexer
-        # that owns the pty would use, and it comes free with an enumeration we
-        # already make. Window-level: tmux has no #{pane_activity}.
-        [ -n "${win_act:-}" ] && pane_last_output[$pane_id]="$win_act"
 
         [[ -z "${sess_cwd[$sname]:-}" ]] && sess_cwd[$sname]="$pcwd"
         pane_to_session[$ppid]="$sname"
@@ -211,7 +259,7 @@ collect_data() {
         sess_state[$sname]="$state"
         sess_extra[$sname]="$extra"
         sess_ssh[$sname]="$is_ssh"
-    done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}${_tab}#{window_active}${_tab}#{session_attached}${_tab}#{window_activity}" 2>/dev/null)
+    done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}${_tab}#{window_active}${_tab}#{session_attached}" 2>/dev/null)
 
     # ── 3. Worktree detection ────────────────────────────────────
     declare -A worktree_parent worktree_children
@@ -308,11 +356,25 @@ collect_data() {
 
     # Build sess_agents from KNOWN_AGENTS + per-pane status files.
     declare -A sess_agents
+    # Sample the screens of panes that claim to be working, before resolving
+    # states below. Only those panes, and only every few seconds.
+    if (( STALE_WORKING_SECS > 0 )); then
+        local _working_keys=() _wk _wowner _wpid
+        for _wk in "${!KNOWN_AGENTS[@]}"; do
+            _wowner="${_wk%%:*}"; _wpid="${_wk#*:}"
+            [ -f "$pane_dir/${_wowner}_${_wpid}.status" ] || continue
+            [ "$(<"$pane_dir/${_wowner}_${_wpid}.status")" = "working" ] || continue
+            _working_keys+=("$_wk")
+        done
+        (( ${#_working_keys[@]} )) && _sample_working_screens "$now" "$pane_dir" "${_working_keys[@]}"
+    fi
+
     for key in "${!KNOWN_AGENTS[@]}"; do
         local owner="${key%%:*}"
         local pid_id="${key#*:}"
         local agent_name="${KNOWN_AGENTS[$key]}"
         local pane_status=""
+        local akey_screen="${owner}:${pid_id}"
         local pane_file="$pane_dir/${owner}_${pid_id}.status"
         if [ -f "$pane_file" ]; then
             pane_status=$(<"$pane_file")
@@ -326,24 +388,24 @@ collect_data() {
                 pane_status="wait"
             fi
         fi
-        # A "working" status that the window contradicts.
+        # A "working" status the pane's own screen contradicts.
         #
         # State is pushed by hooks and nothing expires it, so a Stop that never
-        # fires -- an agent killed, interrupted, or whose hook is broken --
-        # leaves "working" set forever. Observed in the wild at 158 minutes,
-        # with the agent process alive and idle, so process liveness does not
-        # catch it either.
+        # fires -- an agent killed, interrupted, or whose hook path broke --
+        # leaves "working" set forever. Observed at 903 minutes, with the agent
+        # process alive and idle, so process liveness does not catch it.
         #
-        # tmux knows when the window last produced output. An agent that is
-        # genuinely working prints something; one that has printed nothing for
-        # many minutes is not working, whatever its status file claims. Resolve
-        # to "idle" rather than "done": the honest statement is "no longer
-        # believable", not "finished", and "done" would fire the completion
-        # sound and show a tick for work that may never have completed.
+        # An agent that is working repaints its pane: a spinner, a token
+        # counter, a tool result scrolling past. One that has finished holds a
+        # static prompt. So a screen that has not changed for many minutes
+        # contradicts the status.
+        #
+        # Resolve to "idle", never "done": the honest claim is "no longer
+        # believable", not "finished", and "done" would show a tick and fire the
+        # completion sound for work that may never have completed.
         if [ "$pane_status" = "working" ] && (( STALE_WORKING_SECS > 0 )); then
-            local _last="${pane_last_output[$pid_id]:-}"
-            if [ -n "$_last" ] && (( _last > 0 )) \
-               && (( now - _last > STALE_WORKING_SECS )); then
+            local _chg="${_SCREEN_TS[$akey_screen]:-}"
+            if [ -n "$_chg" ] && (( now - _chg > STALE_WORKING_SECS )); then
                 pane_status="idle"
             fi
         fi
