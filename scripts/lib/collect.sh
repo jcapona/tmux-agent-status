@@ -265,6 +265,24 @@ collect_data() {
         done <<< "$agent_lines"
     fi
 
+    # Which sessions have per-pane tracking at all? A pane that has not
+    # reported is unknown -- not "whatever the busiest pane beside it is doing".
+    # Inheriting the session state meant one genuinely working agent lit up
+    # every untracked agent pane in the same session, which is the normal case
+    # rather than a broken one.
+    #
+    # Sessions with no per-pane data whatsoever still inherit: that is what the
+    # fallback was written for -- an SSH remote reported only at session level,
+    # where the session state is the only signal there is.
+    declare -A _sess_has_pane_status=()
+    local _psf _psb
+    for _psf in "$pane_dir"/*.status; do
+        [ -f "$_psf" ] || continue
+        _psb="${_psf##*/}"
+        _psb="${_psb%.status}"
+        _sess_has_pane_status["${_psb%_%*}"]=1
+    done
+
     # Build sess_agents from KNOWN_AGENTS + per-pane status files.
     declare -A sess_agents
     for key in "${!KNOWN_AGENTS[@]}"; do
@@ -285,7 +303,15 @@ collect_data() {
                 pane_status="wait"
             fi
         fi
-        [ -z "$pane_status" ] && pane_status="${sess_state[$owner]:-done}"
+        if [ -z "$pane_status" ]; then
+            if [ -n "${_sess_has_pane_status[$owner]:-}" ]; then
+                # Tracked session, silent pane: unknown. Renders as a dim dot,
+                # and _state_pri gives it 0 so it cannot raise session state.
+                pane_status="idle"
+            else
+                pane_status="${sess_state[$owner]:-done}"
+            fi
+        fi
         sess_agents[$owner]+="${pid_id}:${agent_name}:${pane_status} "
     done
 
