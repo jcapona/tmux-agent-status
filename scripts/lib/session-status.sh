@@ -304,6 +304,23 @@ get_pane_status() {
         return
     fi
 
+    # This pane has never reported. Falling back to the session's state here is
+    # the same mistake collect_data used to make: the session's state is the
+    # highest-priority state among its panes, so one genuinely working agent
+    # made every silent pane beside it report working too -- including panes
+    # running a plain shell.
+    #
+    # Inherit only when the session has no per-pane data at all, which is what
+    # the fallback exists for: an SSH remote reported only at session level,
+    # where the session state is the only signal there is.
+    local _any
+    for _any in "$PANE_DIR/${session}_"*.status; do
+        if [ -f "$_any" ]; then
+            echo "idle"
+            return
+        fi
+    done
+
     get_agent_status "$session"
 }
 

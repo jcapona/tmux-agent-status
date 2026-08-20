@@ -49,5 +49,19 @@ check "a stale cache falls back to the raw file"       "working" "$(ask 0 '%100'
 rm -f "$D/.sidebar-cache"
 check "no cache falls back to the raw file"            "working" "$(ask 0 '%100')"
 
+# A pane that has never reported must not inherit the session's state -- the
+# same mistake collect_data used to make, and the reason a plain shell showed as
+# working next to a busy agent.
+printf 'working\n' > "$D/panes/0_%400.status"     # session has per-pane data
+printf 'working\n' > "$D/0.status"                # and the session says working
+rm -f "$D/.sidebar-cache"
+check "a never-reporting pane does not inherit"   "idle" "$(ask 0 '%500')"
+check "  a reporting pane is unaffected"          "working" "$(ask 0 '%400')"
+
+# With no per-pane data at all, inheriting is still right: that is the SSH
+# remote case, where session state is the only signal.
+rm -f "$D"/panes/*.status
+check "sessions with no pane data still inherit"  "working" "$(ask 0 '%600')"
+
 if [ "$FAILURES" -ne 0 ]; then printf '\n%d check(s) failed\n' "$FAILURES"; exit 1; fi
 printf '\nall checks passed\n'
