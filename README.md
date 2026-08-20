@@ -172,6 +172,11 @@ set -g @agent-status-display-method "popup" # popup | window
 # closing redistributes every pane in the window), so the sidebar keeps this
 # width instead of drifting to whatever share the layout gives it. Ignored for
 # a window too narrow to give it without squeezing everything else.
+#
+# Note that this makes the option authoritative: resizing the sidebar by hand
+# holds until the next time a pane opens or closes in that window, at which
+# point it returns to this width. Set the option rather than dragging the
+# border if you want a different width to stick.
 set -g @agent-sidebar-width "42"
 
 # A sidebar is a pane, so it lives in exactly one window. Off (the default) runs
