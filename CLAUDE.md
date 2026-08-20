@@ -57,7 +57,14 @@ placement follows from that:
   will write to the real `~/.claude/settings.json`. This has happened.
 - **Tests get their own tmux server** on a private socket (`tmux -L <socket>`),
   never the user's.
+- **Keep README option comments to 2-6 lines** -- what it does, its values, and
+  the one thing not obvious from the name. Rationale and measurements go in
+  commit messages and here.
 - **Measure, do not assert.** Performance claims need `tests/bench.sh`.
+- **Add the trap before you move on.** When something below the Traps heading
+  would have saved you, it goes in this file in the same change that fixed it --
+  not when someone asks. If it cost an hour, or it looked like a bug in your code
+  and was not, it qualifies.
 
 ## Traps
 
@@ -83,6 +90,14 @@ firing. Guards belong in the script the hook calls, not in the registration.
 server with fifteen sessions, fifteen handlers run inside the same half second.
 Any check-then-act in one of them is a race. Claim with `ln` (atomic, fails if
 the target exists), as `sidebar-collector.sh` does in `_claim()`.
+
+**There is no `#{pane_activity}`.** `#{window_activity}` is window-level, so a
+shell in the same window resets it -- and so does `join-pane`, which means follow
+mode moving the sidebar in or out of a window masks staleness there. A pane
+whose status file was 903 minutes old sat in a window reporting output 1 minute
+ago. For a per-pane signal, hash the pane's visible tail instead:
+`capture-pane -p -t <pane> -S -8 | cksum`. An agent that is working repaints; an
+idle one is byte-identical between samples.
 
 **Panes are not pinned.** When a pane opens or closes, tmux reflows every pane in
 the window — a sidebar created at 42 columns becomes a third of the window.
@@ -155,8 +170,26 @@ builds a fixed world on a private socket with a set number of agents pinned to
 an `fswatch`, a socket server, or a display proxy — exactly the changes under
 evaluation.
 
+**`pgrep -f` matches the measuring script.** If the pattern is in a variable,
+the script's own command line contains it, so it counts itself. Two live
+readings in one session were wrong this way, and the tell was an impossible
+process count. Resolve by path and exclude `$$`.
+
+**Never compare a just-restarted process against a warm one.** A collector
+seconds old is still building its cache; a renderer is still doing first paint.
+`tests/bench.sh` restarts everything identically per run, which is the point of
+it.
+
 **Compare against a spread, not a single number.** If the difference is smaller
 than the trial-to-trial spread, there is no difference.
+
+### State
+
+**Staleness has to be observed, not inferred.** A freshly started process has no
+memory of what came before, so starting each item's clock at "now" hands
+everything a full grace period on every restart -- and reloads are frequent.
+Seed from a durable timestamp instead: the status file's mtime is the last
+moment a hook said anything about that pane.
 
 ### git
 
