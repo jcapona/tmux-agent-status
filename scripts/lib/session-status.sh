@@ -20,6 +20,12 @@ WAIT_DIR="$STATUS_DIR/wait"
 PANE_DIR="$STATUS_DIR/panes"
 SIDEBAR_CLIENT_DIR="$STATUS_DIR/sidebar-clients"
 STATUS_LINE_CACHE_FILE="$STATUS_DIR/.status-line"
+SIDEBAR_CACHE_FILE="$STATUS_DIR/.sidebar-cache"
+
+# How stale the collector's cache may be before it is ignored. The collector
+# rewrites it once a second while running, so anything older than this means it
+# is not running and the raw files are all there is.
+SIDEBAR_CACHE_MAX_AGE=30
 STATUS_LINE_COUNTS_FILE="$STATUS_DIR/.status-line-counts"
 REFRESH_FILE="$STATUS_DIR/.sidebar-refresh"
 VISIBLE_FILE="$STATUS_DIR/.visible-panes"
@@ -234,10 +240,43 @@ expire_wait_timers() {
     echo "$expired_count"
 }
 
+# The state the collector resolved for a pane, or failure if it has no opinion.
+#
+# The collector applies rules that a one-shot caller cannot: a pane with no
+# status file of its own is unknown rather than inheriting the session's, and a
+# "working" claim is disbelieved once the pane's screen stops changing -- which
+# needs screen hashes remembered between samples, so only a long-lived process
+# can do it.
+#
+# Re-deriving from the raw files instead means each surface disagrees with the
+# others. The switcher showed panes as working that the sidebar showed as idle,
+# including panes with no status file at all.
+cached_pane_status() {
+    local session="$1" pane_id="$2" now mtime line
+    [ -f "$SIDEBAR_CACHE_FILE" ] || return 1
+    printf -v now '%(%s)T' -1
+    mtime=$(stat -f %m "$SIDEBAR_CACHE_FILE" 2>/dev/null \
+            || stat -c %Y "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
+    (( now - mtime > SIDEBAR_CACHE_MAX_AGE )) && return 1
+    line=$(grep -m1 -F "R:Q|${session}|${pane_id}|" "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
+    [ -n "$line" ] || return 1
+    line="${line#*|*|*|*|}"
+    printf '%s' "${line%%|*}"
+}
+
 get_pane_status() {
     local session="$1"
     local pane_id="$2"
     local pane_status="$PANE_DIR/${session}_${pane_id}.status"
+
+    # Prefer the collector's resolved verdict; fall back to the raw files when
+    # it is not running.
+    local _resolved
+    if _resolved=$(cached_pane_status "$session" "$pane_id") && [ -n "$_resolved" ]; then
+        printf '%s\n' "$_resolved"
+        return
+    fi
+
     local pane_wait="$WAIT_DIR/${session}_${pane_id}.wait"
     local pane_parked="$PARKED_DIR/${session}_${pane_id}.parked"
 
