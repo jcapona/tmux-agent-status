@@ -36,7 +36,7 @@ Required:
 Optional, each needed only for the feature named:
 
 - `python3` -- installing agent hooks, which edits agent JSON config
-- `jq` -- multi-agent deploy only
+- `jq` -- lets the Claude hook count background tasks exactly; without it a string-matching fallback is used
 - `afplay` (macOS) or `paplay`/`aplay` (Linux) -- notification sounds, off by default
 
 ## Install
@@ -248,17 +248,6 @@ Options: `chime` (default), `bell`, `fanfare`, `frog`, `speech`, `none`.
 
 `@agent-sound` is the master switch: with it off nothing plays regardless of the
 options above. `none` mutes a single event while leaving the other enabled.
-
-## Multi-Agent Deploy
-
-Launch parallel AI coding sessions with isolated git worktrees:
-
-```bash
-bash ~/.tmux/plugins/tmux-agent-status/scripts/deploy-sessions.sh manifest.json
-```
-
-Each session gets a `deploy/<name>` branch, and the plugin tracks the spawned sessions automatically.
-
 
 ## How It Works
 
