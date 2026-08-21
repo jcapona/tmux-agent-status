@@ -20,6 +20,13 @@ cat > "$FAKE_BIN/tmux" <<EOF
 set -euo pipefail
 
 case "\${1:-}" in
+    show-option)
+        case "\${3:-}" in
+            @agent-sidebar-inbox) echo "on" ;;
+            *) : ;;
+        esac
+        exit 0
+        ;;
     list-sessions)
         if [ "\${2:-}" = "-F" ] && [ "\${3:-}" = "#{session_name}" ]; then
             echo "agent-task"

@@ -76,6 +76,17 @@ _sidebar_mode() {
 # Read per collection cycle rather than cached to a file like _sidebar_mode, so
 # the option takes effect on a config reload without restarting the collector.
 # One `show-option` is negligible next to the `list-panes -a` each cycle runs.
+# The INBOX section is opt-in. prefix+N walks the same rows, so it sets
+# INBOX_FORCE before collecting -- turning the section off hides it from the
+# sidebar without disabling the jump, which is a separate feature.
+_inbox_enabled() {
+    (( ${INBOX_FORCE:-0} )) && { echo 1; return; }
+    case "$(tmux show-option -gqv "@agent-sidebar-inbox" 2>/dev/null)" in
+        1|on|true|yes) echo 1 ;;
+        *)             echo 0 ;;
+    esac
+}
+
 _show_all_windows() {
     case "$(tmux show-option -gqv "@agent-show-all-windows" 2>/dev/null)" in
         1|on|true|yes) echo 1 ;;
@@ -661,7 +672,7 @@ collect_data() {
     }
 
     # ── INBOX ────────────────────────────────────────────────────
-    if [[ "$SIDEBAR_MODE" != "agents" ]]; then
+    if [[ "$SIDEBAR_MODE" != "agents" ]] && (( $(_inbox_enabled) )); then
         local inbox=()
         for sname in "${all_sessions[@]}"; do
                 if [[ -n "${sess_agents[$sname]:-}" ]]; then

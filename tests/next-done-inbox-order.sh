@@ -21,6 +21,13 @@ set -euo pipefail
 log_file="${TMUX_LOG:-}"
 
 case "${1:-}" in
+    show-option)
+        case "${3:-}" in
+            @agent-sidebar-inbox) echo "on" ;;
+            *) : ;;
+        esac
+        exit 0
+        ;;
     list-sessions)
         printf 'repo\nzeta\n'
         ;;

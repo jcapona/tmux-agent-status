@@ -83,6 +83,9 @@ inbox_target_is_excluded() {
     [ "$candidate_session" = "$(selection_session "$EXCLUDE_NAME" "$EXCLUDE_TYPE")" ]
 }
 
+# The inbox section may be switched off in the sidebar; this jump still
+# needs its rows, so ask for them explicitly.
+INBOX_FORCE=1
 collect_data
 
 target_names=()

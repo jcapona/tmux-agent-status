@@ -142,7 +142,7 @@ Inside the sidebar:
 - `x` performs the same close action without interfering with popup search input
 - `m` toggles between tree and agents view (rebind with `@agent-sidebar-mode-key`)
 
-`prefix + N` follows the same top-to-bottom order as the `INBOX` section. The inbox is ordered by session name, then by tmux window order within each session.
+`prefix + N` follows the same top-to-bottom order as the `INBOX` section, whether or not that section is shown (see `@agent-sidebar-inbox`). The inbox is ordered by session name, then by tmux window order within each session.
 
 Closing always applies to the selected scope only:
 
@@ -199,6 +199,12 @@ set -g @agent-show-all-windows "off"       # off | on
 # Off by default: the same counts appear per session in the tree below.
 set -g @agent-sidebar-header "off"         # off | on
 
+# INBOX section listing done/ask work above the session tree. Off by default:
+# the same states are visible in the tree, and the gutter makes them easy to
+# spot. prefix+N keeps working either way -- the jump reads these rows
+# directly and does not depend on the section being shown.
+set -g @agent-sidebar-inbox "off"          # off | on
+
 # Install missing agent hooks on load instead of only reporting them. Nothing
 # is written when the hooks are already correct, so this does not rewrite agent
 # config files every time tmux reloads.
@@ -228,7 +234,7 @@ The switcher popup has two views. **Tree** (default) is the hierarchical session
 
 Within a session the sidebar lists its windows, each prefixed by its tmux window index; the current window has its index bracketed and highlighted. Every window holding an agent expands to show those agent panes beneath it, including a window with only one — a row therefore always says whether it is a window or an agent, rather than a lone agent borrowing its window's name. Windows with no agent appear only when `@agent-show-all-windows` is on.
 
-The sidebar has the same two views, toggled with `m` from inside the sidebar pane (alongside `x` for close). In **tree** mode the SESSIONS section lists every session and collapses single-agent sessions to one row; the INBOX section surfaces `done`/`ask` work. In **agents** mode the SESSIONS section is filtered to sessions/worktrees that contain agent panes and every agent pane is expanded; INBOX is suppressed because it would duplicate the same rows.
+The sidebar has the same two views, toggled with `m` from inside the sidebar pane (alongside `x` for close). In **tree** mode the SESSIONS section lists every session and collapses single-agent sessions to one row; the INBOX section -- off by default, see `@agent-sidebar-inbox` -- surfaces `done`/`ask` work. In **agents** mode the SESSIONS section is filtered to sessions/worktrees that contain agent panes and every agent pane is expanded; INBOX is suppressed because it would duplicate the same rows.
 
 ## Notification Sounds
 
