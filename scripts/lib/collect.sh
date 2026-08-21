@@ -4,13 +4,13 @@
 # Sourced by sidebar-collector.sh (daemon) and optionally sidebar.sh (fallback).
 #
 # Requires the caller to:
-#   - source lib/session-status.sh (for STATUS_DIR, PARKED_DIR, WAIT_DIR)
+#   - source lib/session-status.sh (for STATUS_DIR)
 #   - declare global: ENTRIES, SEL_NAMES, SEL_TYPES, PANE_COUNTS (associative),
 #     KNOWN_AGENTS (associative), LIVE_PANES (associative), PID_PPID (associative),
 #     SESS_START, _COLLECT_TICK, _LAST_STATUS_MTIME
 #
 # Populates: ENTRIES[], SEL_NAMES[], SEL_TYPES[], PANE_COUNTS[], SESS_START,
-#            SUMMARY_WORKING, SUMMARY_WAITING, SUMMARY_DONE, SUMMARY_TOTAL,
+#            SUMMARY_WORKING, SUMMARY_DONE, SUMMARY_TOTAL,
 #            SUMMARY_HAS_WORKING, SUMMARY_AGENTS[]
 # Persists across calls: LIVE_PANES[]
 # Sets _COLLECT_CHANGED=1 when data was rebuilt, 0 when skipped (no changes).
@@ -49,8 +49,8 @@ find_ancestor_pane() {
 # ─── State priority ───────────────────────────────────────────────
 _state_pri() {
     case "$1" in
-        working) echo 5 ;; wait)    echo 4 ;; ask)     echo 3 ;;
-        done)    echo 2 ;; parked)  echo 1 ;; *)       echo 0 ;;
+        working) echo 5 ;; ask)     echo 3 ;;
+        done)    echo 2 ;; *)       echo 0 ;;
     esac
 }
 
@@ -139,8 +139,14 @@ _sample_working_screens() {
             # better estimate of when it was last really doing something.
             local _seed_file="$pane_dir/${key%%:*}_${key#*:}.status"
             if [ -f "$_seed_file" ]; then
-                _SCREEN_TS[$key]=$(stat -f %m "$_seed_file" 2>/dev/null \
-                                   || stat -c %Y "$_seed_file" 2>/dev/null || echo "$now")
+                # stat -f means "format" on macOS but "filesystem status" on GNU
+                # coreutils, where it succeeds and prints block counts -- so a ||
+                # fallback silently yields garbage. Branch on the OS instead.
+                if [[ "$(uname)" == "Darwin" ]]; then
+                    _SCREEN_TS[$key]=$(stat -f %m "$_seed_file" 2>/dev/null || echo "$now")
+                else
+                    _SCREEN_TS[$key]=$(stat -c %Y "$_seed_file" 2>/dev/null || echo "$now")
+                fi
             else
                 _SCREEN_TS[$key]="$now"
             fi
@@ -154,7 +160,6 @@ _sample_working_screens() {
 
 # ─── Main collection ──────────────────────────────────────────────
 collect_data() {
-    expire_wait_timers >/dev/null
 
     local SIDEBAR_MODE
     SIDEBAR_MODE=$(_sidebar_mode)
@@ -166,9 +171,9 @@ collect_data() {
     (( ++_COLLECT_TICK >= 10 )) && { _COLLECT_TICK=0; _LAST_STATUS_MTIME=""; }
     local cur_mtime
     if [[ "$(uname)" == "Darwin" ]]; then
-        cur_mtime=$(stat -f %m "$STATUS_DIR" "$PARKED_DIR" "$WAIT_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null)
+        cur_mtime=$(stat -f %m "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null)
     else
-        cur_mtime=$(stat -c %Y "$STATUS_DIR" "$PARKED_DIR" "$WAIT_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null)
+        cur_mtime=$(stat -c %Y "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null)
     fi
     if [[ "$cur_mtime" == "$_LAST_STATUS_MTIME" ]]; then
         _COLLECT_CHANGED=0
@@ -181,7 +186,6 @@ collect_data() {
     SEL_NAMES=()
     SEL_TYPES=()
     SUMMARY_WORKING=0
-    SUMMARY_WAITING=0
     SUMMARY_DONE=0
     SUMMARY_TOTAL=0
     SUMMARY_HAS_WORKING=0
@@ -193,7 +197,7 @@ collect_data() {
     STALE_WORKING_SECS=$(_stale_working_secs)
 
     # ── 1+2. Session + pane data (single tmux call) ────────────
-    declare -A sess_state sess_extra sess_ssh sess_seen
+    declare -A sess_state sess_extra sess_seen
     declare -A sess_cwd
     declare -A pane_to_session   # pane_pid → session
     declare -A pane_to_id        # pane_pid → pane_id (e.g. %5)
@@ -223,42 +227,17 @@ collect_data() {
         [[ -n "${sess_seen[$sname]:-}" ]] && continue
         sess_seen[$sname]=1
 
-        local state="noagent" extra="" is_ssh="" status=""
+        local state="noagent" extra="" status=""
 
-        if session_is_fully_parked "$sname"; then
-            status="parked"
-        elif [ -f "$STATUS_DIR/${sname}-remote.status" ]; then
-            status=$(<"$STATUS_DIR/${sname}-remote.status")
-            is_ssh="ssh"
-        fi
         if [ -f "$STATUS_DIR/${sname}.status" ]; then
             status=$(<"$STATUS_DIR/${sname}.status")
         fi
-        if [ "$status" = "parked" ] && ! session_is_fully_parked "$sname"; then
-            status=""
-        fi
-        if [ "$status" = "wait" ] && [ ! -f "$WAIT_DIR/${sname}.wait" ]; then
-            status=""
-        fi
         [ -n "$status" ] && state="$status"
 
-        if [ "$state" = "wait" ]; then
-            local wf="$WAIT_DIR/${sname}.wait"
-            if [ -f "$wf" ]; then
-                local expiry
-                expiry=$(<"$wf")
-                if [ -n "$expiry" ] && (( expiry > now )); then
-                    extra="$(( (expiry - now + 59) / 60 ))m"
-                else
-                    state="done"
-                fi
-            fi
-        fi
-        rm -f "$STATUS_DIR/${sname}.unread" "$STATUS_DIR/${sname}-remote.unread" 2>/dev/null
+        rm -f "$STATUS_DIR/${sname}.unread" 2>/dev/null
 
         sess_state[$sname]="$state"
         sess_extra[$sname]="$extra"
-        sess_ssh[$sname]="$is_ssh"
     done < <(tmux list-panes -a -F "#{session_name}${_tab}#{pane_id}${_tab}#{pane_current_path}${_tab}#{pane_pid}${_tab}#{window_index}${_tab}#{window_name}${_tab}#{window_active}${_tab}#{session_attached}" 2>/dev/null)
 
     # ── 3. Worktree detection ────────────────────────────────────
@@ -343,7 +322,7 @@ collect_data() {
     # rather than a broken one.
     #
     # Sessions with no per-pane data whatsoever still inherit: that is what the
-    # fallback was written for -- an SSH remote reported only at session level,
+    # fallback was written for -- a session whose agents have not reported
     # where the session state is the only signal there is.
     declare -A _sess_has_pane_status=()
     local _psf _psb
@@ -378,15 +357,6 @@ collect_data() {
         local pane_file="$pane_dir/${owner}_${pid_id}.status"
         if [ -f "$pane_file" ]; then
             pane_status=$(<"$pane_file")
-        fi
-        # Check per-pane parked/wait overrides
-        [ -f "$PARKED_DIR/${owner}_${pid_id}.parked" ] && pane_status="parked"
-        local pwf="$WAIT_DIR/${owner}_${pid_id}.wait"
-        if [ -f "$pwf" ]; then
-            local exp=$(<"$pwf")
-            if [ -n "$exp" ] && (( exp > now )); then
-                pane_status="wait"
-            fi
         fi
         # A "working" status the pane's own screen contradicts.
         #
@@ -425,7 +395,6 @@ collect_data() {
     # ── 5. Re-derive session state from per-pane statuses ──────
     for sname in "${!sess_agents[@]}"; do
         local cur_st="${sess_state[$sname]}"
-        [[ "$cur_st" == "wait" || "$cur_st" == "parked" ]] && continue
         local best_pri=-1 best_st="$cur_st"
         best_pri=$(_state_pri "$best_st" 2>/dev/null || echo 0)
         for ap in ${sess_agents[$sname]}; do
@@ -448,10 +417,6 @@ collect_data() {
                 ((SUMMARY_TOTAL++))
                 SUMMARY_HAS_WORKING=1
                 ;;
-            wait)
-                ((SUMMARY_WAITING++))
-                ((SUMMARY_TOTAL++))
-                ;;
             done|ask)
                 ((SUMMARY_DONE++))
                 ((SUMMARY_TOTAL++))
@@ -465,14 +430,14 @@ collect_data() {
     # One "name:status" spec per agent, ordered by session name then pane
     # id so glyph positions in the status bar stay stable across refreshes.
     # Sessions with detected agent panes contribute one spec per pane;
-    # sessions tracked only at session level (e.g. SSH remotes) contribute
+    # sessions tracked only at session level contribute
     # a single generic spec.
     SUMMARY_AGENTS=()
     while IFS= read -r sname; do
         [ -z "$sname" ] && continue
         local sstate="${sess_state[$sname]}"
         case "$sstate" in
-            working|wait|done|ask) ;;
+            working|done|ask) ;;
             *) continue ;;
         esac
 
@@ -488,13 +453,8 @@ collect_data() {
             aname="${aname%%:*}"
             local astatus="${ap#*:}"
             astatus="${astatus#*:}"
-            # A session-wide wait snoozes every agent in it. Parked panes
-            # stay hidden (matching collect_status_agents in status-line.sh).
-            if [ "$sstate" = "wait" ] && [ "$astatus" != "parked" ]; then
-                astatus="wait"
-            fi
             case "$astatus" in
-                working|wait|done|ask)
+                working|done|ask)
                     SUMMARY_AGENTS+=("${aname}:${astatus}")
                     ;;
             esac
@@ -505,7 +465,7 @@ collect_data() {
     PANE_COUNTS=()
     for sname in "${!sess_agents[@]}"; do
         local agents="${sess_agents[$sname]}"
-        local pw=0 pd=0 pwt=0 count=0
+        local pw=0 pd=0 count=0
         local seen=""
         for ap in $agents; do
             local pid="${ap%%:*}"
@@ -513,11 +473,11 @@ collect_data() {
             seen+="$pid "
             local rest="${ap#*:}"; local ps="${rest#*:}"
             case "$ps" in
-                working) ((pw++)) ;; done|ask) ((pd++)) ;; wait) ((pwt++)) ;;
+                working) ((pw++)) ;; done|ask) ((pd++)) ;;
             esac
             ((count++))
         done
-        (( count > 1 )) && PANE_COUNTS[$sname]="${pw}:${pd}:${pwt}"
+        (( count > 1 )) && PANE_COUNTS[$sname]="${pw}:${pd}"
     done
 
     # ── 6. Collapse single-worktree parents ────────────────────
@@ -691,7 +651,7 @@ collect_data() {
         for wt in "${wt_names[@]}"; do
             ((wi++))
             local is_last=$((wi==${#wt_names[@]}))
-            ENTRIES+=("W|${wt}|${sess_state[$wt]}|${sess_extra[$wt]}|${sess_ssh[$wt]}|${is_last}")
+            ENTRIES+=("W|${wt}|${sess_state[$wt]}|${sess_extra[$wt]}|${is_last}")
             SEL_NAMES+=("$wt")
             SEL_TYPES+=("W")
             _emit_agents "$wt"
@@ -704,8 +664,7 @@ collect_data() {
     if [[ "$SIDEBAR_MODE" != "agents" ]]; then
         local inbox=()
         for sname in "${all_sessions[@]}"; do
-            session_is_fully_parked "$sname" && continue
-            if [[ -n "${sess_agents[$sname]:-}" ]]; then
+                if [[ -n "${sess_agents[$sname]:-}" ]]; then
                 _get_agent_arr "$sname"
                 local arr=("${_agent_result[@]}")
                 if (( ${#arr[@]} <= 1 )); then
@@ -819,8 +778,7 @@ collect_data() {
         for sname in "${sorted_sessions[@]}"; do
             local st="${eff_state[$sname]}"
             local ex="${sess_extra[$sname]}"
-            local ss="${sess_ssh[$sname]}"
-            local entry="S|${sname}|${st}|${ex}|${ss}"
+            local entry="S|${sname}|${st}|${ex}"
             _emit_session "$entry" "$sname"
         done
     fi
@@ -830,11 +788,8 @@ collect_data() {
         [ -f "$sf" ] || continue
         local sname
         sname=$(basename "$sf" .status)
-        [[ "$sname" == *-remote ]] && continue
         [[ -n "${sess_seen[$sname]:-}" ]] && continue
-        rm -f "$sf" "$STATUS_DIR/${sname}-remote.status"
-        rm -f "$PARKED_DIR/${sname}.parked" "$PARKED_DIR/${sname}_"*.parked
-        rm -f "$WAIT_DIR/${sname}.wait" "$WAIT_DIR/${sname}_"*.wait
+        rm -f "$sf"
         rm -f "$STATUS_DIR/panes/${sname}_"*.status "$STATUS_DIR/panes/${sname}_"*.agent
     done
 

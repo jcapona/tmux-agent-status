@@ -10,11 +10,9 @@ TEST_HOME="$TMP_DIR/home"
 FAKE_BIN="$TMP_DIR/bin"
 STATUS_DIR="$TEST_HOME/.cache/tmux-agent-status"
 PANE_DIR="$STATUS_DIR/panes"
-WAIT_DIR="$STATUS_DIR/wait"
-PARKED_DIR="$STATUS_DIR/parked"
 LOG_FILE="$TMP_DIR/tmux.log"
 
-mkdir -p "$FAKE_BIN" "$STATUS_DIR" "$PANE_DIR" "$WAIT_DIR" "$PARKED_DIR"
+mkdir -p "$FAKE_BIN" "$STATUS_DIR" "$PANE_DIR"
 
 tab=$'\t'
 cat > "$FAKE_BIN/tmux" <<EOF
@@ -42,9 +40,9 @@ case "\${1:-}" in
     list-panes)
         if [ "\${2:-}" = "-a" ] && [ "\${3:-}" = "-F" ]; then
             case "\${4:-}" in
-                "#{session_name}${tab}#{pane_id}${tab}#{pane_current_path}${tab}#{pane_pid}${tab}#{window_index}${tab}#{window_name}")
-                    printf 'repo${tab}%%1${tab}/home/test/repo${tab}101${tab}0${tab}main\n'
-                    printf 'zeta${tab}%%9${tab}/home/test/zeta${tab}109${tab}0${tab}next\n'
+                "#{session_name}${tab}#{pane_id}${tab}#{pane_current_path}${tab}#{pane_pid}${tab}#{window_index}${tab}#{window_name}${tab}#{window_active}${tab}#{session_attached}")
+                    printf 'repo${tab}%%1${tab}/home/test/repo${tab}101${tab}0${tab}main${tab}1${tab}0\n'
+                    printf 'zeta${tab}%%9${tab}/home/test/zeta${tab}109${tab}0${tab}next${tab}1${tab}0\n'
                     exit 0
                     ;;
                 "#{session_name}${tab}#{pane_id}")

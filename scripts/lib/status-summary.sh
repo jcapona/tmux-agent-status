@@ -25,7 +25,6 @@ agent_glyph_frames() {
 agent_status_style() {
     case "$1" in
         working) echo "#[fg=yellow,bold]" ;;
-        wait)    echo "#[fg=cyan]" ;;
         ask)     echo "#[fg=magenta,bold]" ;;
         *)       echo "#[fg=green]" ;;
     esac
@@ -71,7 +70,7 @@ render_status_summary() {
     printf '%s\n' "${parts[*]}"
 }
 
-# write_status_summary_cache <working> <waiting> <done> <total> [name:status ...]
+# write_status_summary_cache <working> <done> <total> [name:status ...]
 # The counts feed the counts file (used for done-notification diffing); the
 # agent specs feed the rendered cache. The cache stores one line per
 # animation frame; the status line picks the line matching the current frame
@@ -79,12 +78,11 @@ render_status_summary() {
 # to publish.
 write_status_summary_cache() {
     local working="$1"
-    local waiting="$2"
-    local done="$3"
-    local total_agents="$4"
-    shift 4
+    local done="$2"
+    local total_agents="$3"
+    shift 3
 
-    printf '%s\n' "$working:$waiting:$done:$total_agents" > "${STATUS_LINE_COUNTS_FILE}.tmp"
+    printf '%s\n' "$working:$done:$total_agents" > "${STATUS_LINE_COUNTS_FILE}.tmp"
     mv -f "${STATUS_LINE_COUNTS_FILE}.tmp" "$STATUS_LINE_COUNTS_FILE"
     {
         render_status_summary 0 "$@"

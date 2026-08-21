@@ -108,11 +108,11 @@ _HAS_WORKING=0
 
 # Flat list rebuilt each frame.  Each element is one of:
 #   "G|<label>|<color>"                          — group header (not selectable)
-#   "S|<name>|<state>|<extra>|<ssh>"             — session (selectable)
-#   "W|<name>|<state>|<extra>|<ssh>|<is_last>"   — worktree child (selectable)
+#   "S|<name>|<state>|<extra>"                   — session (selectable)
+#   "W|<name>|<state>|<extra>|<is_last>"         — worktree child (selectable)
 #   "P|<session>|<pane_id>|<agent>|<status>|<is_last>" — agent pane (selectable)
 ENTRIES=()
-# Per-session pane counts: session → "working:done:wait" (only for multi-agent sessions)
+# Per-session pane counts: session → "working:done" (only for multi-agent sessions)
 declare -A PANE_COUNTS=()
 
 # Parallel arrays for selectable items.
@@ -122,10 +122,6 @@ SEL_COUNT=0
 
 # (Agent tracking moved to lib/collect.sh, run by sidebar-collector.sh)
 
-# Inline wait-input state.
-WAIT_INPUT_ACTIVE=0
-WAIT_INPUT_TARGET=""
-WAIT_INPUT_BUF=""
 CLOSE_CONFIRM_ACTIVE=0
 CLOSE_CONFIRM_NAME=""
 CLOSE_CONFIRM_TYPE=""
@@ -331,7 +327,7 @@ render() {
     done
 
     # Count by state for the header (per-pane when multi-agent)
-    local nw=0 nd=0 nwt=0
+    local nw=0 nd=0
     for e in "${ENTRIES[@]}"; do
         [[ "$e" != S\|* && "$e" != W\|* ]] && continue
         local rest="${e#?|}"
@@ -339,11 +335,11 @@ render() {
         local st="${rest%%|*}"
         local counts="${PANE_COUNTS[$sname]:-}"
         if [[ -n "$counts" ]]; then
-            IFS=: read -r _pw _pd _pwt <<< "$counts"
-            ((nw += _pw)); ((nd += _pd)); ((nwt += _pwt))
+            IFS=: read -r _pw _pd <<< "$counts"
+            ((nw += _pw)); ((nd += _pd))
         else
             case "$st" in
-                working) ((nw++)) ;; done) ((nd++)) ;; wait) ((nwt++)) ;;
+                working) ((nw++)) ;; done) ((nd++)) ;;
             esac
         fi
     done
@@ -369,8 +365,7 @@ render() {
         buf+=" "
         (( nw > 0 ))  && buf+="${BYEL}${SPINNER_FRAMES[$SPINNER_TICK]}${nw}${RST} "
         (( nd > 0 ))  && buf+="${BGRN}✓${nd}${RST} "
-        (( nwt > 0 )) && buf+="${BCYN}⏸${nwt}${RST} "
-        (( nw + nd + nwt == 0 )) && buf+="${DIM}no agents${RST}"
+        (( nw + nd == 0 )) && buf+="${DIM}no agents${RST}"
         buf+="\033[K\n"
         (( nw > 0 )) && _queue_spinner_target 1 2 "none" "header"
     fi
@@ -533,15 +528,13 @@ render() {
             case "$1" in
                 working) _ic="$YEL"; _icon="${SPINNER_FRAMES[$SPINNER_TICK]}" ;;
                 done)    _ic="$GRN"; _icon="✓" ;;
-                wait)    _ic="$CYN"; _icon="⏸" ;;
-                parked)  _ic="$GRY"; _icon="P" ;;
                 *)       _ic="$GRY"; _icon="·" ;;
             esac
         }
 
-        # Build compact multi-status string from pane counts "w:d:wt"
+        # Build compact multi-status string from pane counts "w:d"
         _render_counts() {
-            IFS=: read -r _cw _cd _cwt <<< "$1"
+            IFS=: read -r _cw _cd <<< "$1"
             _count_str="" ; _count_vlen=0
             if (( _cw > 0 )); then
                 _count_str+="${YEL}${SPINNER_FRAMES[$SPINNER_TICK]}${_cw}${RST}"
@@ -552,19 +545,13 @@ render() {
                 _count_str+="${GRN}✓${_cd}${RST}"
                 ((_count_vlen += ${#_cd} + 1))
             fi
-            if (( _cwt > 0 )); then
-                (( _count_vlen > 0 )) && { _count_str+=" "; ((_count_vlen++)); }
-                _count_str+="${CYN}⏸${_cwt}${RST}"
-                ((_count_vlen += ${#_cwt} + 1))
-            fi
         }
 
         if [[ "$rtype" == "S" ]]; then
             local rest="${entry#S|}"
             local name="${rest%%|*}"; rest="${rest#*|}"
             local state="${rest%%|*}"; rest="${rest#*|}"
-            local extra="${rest%%|*}"; rest="${rest#*|}"
-            local ssh="$rest"
+            local extra="$rest"
             [[ "$name" == "$cur_session" && -z "${_active_pane_in_child[$name]:-}" ]] && is_cur=1
             local _spinner_bg="none"
             (( is_sel )) && _spinner_bg="sel"
@@ -577,7 +564,7 @@ render() {
             if [[ -n "$counts" ]]; then
                 _render_counts "$counts"
                 icon_str="$_count_str"; icon_vlen=$_count_vlen
-                IFS=: read -r _cw _cd _cwt <<< "$counts"
+                IFS=: read -r _cw _cd <<< "$counts"
                 (( _cw > 0 )) && has_working_spinner=1
             else
                 local _icon _ic; _set_icon_color "$state"
@@ -587,7 +574,6 @@ render() {
 
             local suffix=""
             [[ -n "$extra" ]] && suffix=" (${extra})"
-            [[ -n "$ssh" ]] && suffix+=" [ssh]"
             local active_tag=""
             (( is_cur )) && active_tag=" ${ACC_GRN}[ACTIVE]${RST}"
             local tag_vlen=0
@@ -626,7 +612,6 @@ render() {
             local name="${rest%%|*}"; rest="${rest#*|}"
             local state="${rest%%|*}"; rest="${rest#*|}"
             local extra="${rest%%|*}"; rest="${rest#*|}"
-            local ssh="${rest%%|*}"; rest="${rest#*|}"
             local is_last="$rest"
             [[ "$name" == "$cur_session" && -z "${_active_pane_in_child[$name]:-}" ]] && is_cur=1
             local _spinner_bg="none"
@@ -640,7 +625,7 @@ render() {
             if [[ -n "$counts" ]]; then
                 _render_counts "$counts"
                 icon_str="$_count_str"; icon_vlen=$_count_vlen
-                IFS=: read -r _cw _cd _cwt <<< "$counts"
+                IFS=: read -r _cw _cd <<< "$counts"
                 (( _cw > 0 )) && has_working_spinner=1
             else
                 local _icon _ic; _set_icon_color "$state"
@@ -883,21 +868,12 @@ render() {
     # pointing one row below the content it was measured against -- the stray
     # glyphs on the separator and on non-working rows.
     buf+="$sep"
-    if (( WAIT_INPUT_ACTIVE )); then
-        local fprompt=" Wait minutes for ${WAIT_INPUT_TARGET}: "
-        local fvalue="$WAIT_INPUT_BUF"
-        if (( ${#fprompt} >= LW )); then
-            fprompt="${fprompt:0:LW}"; fvalue=""
-        elif (( ${#fprompt} + ${#fvalue} > LW )); then
-            fvalue="${fvalue:0:$(( LW - ${#fprompt} ))}"
-        fi
-        buf+="${BCYN}${fprompt}${RST}${fvalue}\033[K"
-    elif (( SEARCH_ACTIVE )); then
+    if (( SEARCH_ACTIVE )); then
         local ftext=" type to filter  ⏎ select  esc cancel"
         (( ${#ftext} > LW )) && ftext="${ftext:0:LW}"
         buf+="${DIM}${ftext}${RST}\033[K"
     else
-        local ftext=" ⏎ select  / search  w wait  p park  m mode  q quit"
+        local ftext=" ⏎ select  / search  m mode  q quit"
         (( ${#ftext} > LW )) && ftext="${ftext:0:LW}"
         buf+="${DIM}${ftext}${RST}\033[K"
     fi
@@ -1058,73 +1034,6 @@ _selected_state() {
             *) ;;
         esac
     done
-}
-
-action_wait() {
-    (( SEL_COUNT == 0 )) && return
-    local raw_target="${SEL_NAMES[$SELECTED]}"
-    local ttype="${SEL_TYPES[$SELECTED]}"
-    local state
-    state=$(_selected_state)
-
-    # Toggle: if already waiting, cancel wait
-    if [[ "$state" == "wait" ]]; then
-        if [[ "$ttype" == "P" ]]; then
-            local session="${raw_target%%:*}"
-            local pane_id="${raw_target#*:}"
-
-            if [[ "$pane_id" == w* ]]; then
-                # Window-level cancel
-                local win_idx="${pane_id#w}"
-                while IFS= read -r wp_id; do
-                    [ -z "$wp_id" ] && continue
-                    rm -f "$WAIT_DIR/${session}_${wp_id}.wait"
-                    local pf="$STATUS_DIR/panes/${session}_${wp_id}.status"
-                    [ -f "$pf" ] && [ "$(cat "$pf")" = "wait" ] && echo "done" > "$pf"
-                done < <(tmux list-panes -t "${session}:${win_idx}" -F '#{pane_id}' 2>/dev/null)
-            else
-                # Pane-level cancel
-                rm -f "$WAIT_DIR/${session}_${pane_id}.wait"
-                echo "done" > "$STATUS_DIR/panes/${session}_${pane_id}.status" 2>/dev/null
-            fi
-            # Clear session-level wait if no pane waits remain
-            sync_session_after_child_scope_change "$session"
-        else
-            # Session-level cancel
-            local session="$raw_target"
-            rm -f "$WAIT_DIR/${session}.wait"
-            rm -f "$WAIT_DIR/${session}_"*.wait 2>/dev/null
-            if [ -f "$STATUS_DIR/${session}-remote.status" ]; then
-                echo "done" > "$STATUS_DIR/${session}-remote.status"
-            else
-                echo "done" > "$STATUS_DIR/${session}.status"
-            fi
-            for pf in "$STATUS_DIR/panes/${session}_"*.status; do
-                [ -f "$pf" ] && [ "$(cat "$pf")" = "wait" ] && echo "done" > "$pf"
-            done
-        fi
-        _LAST_STATUS_MTIME=""
-        return
-    fi
-
-    # Inline prompt: read minutes directly in the sidebar.
-    # Pass the full target (session or session:pane_id) so the handler
-    # knows whether to wait at session or pane level.
-    WAIT_INPUT_ACTIVE=1
-    if [[ "$ttype" == "P" ]]; then
-        WAIT_INPUT_TARGET="$raw_target"
-    else
-        WAIT_INPUT_TARGET="$(_selected_session)"
-    fi
-    WAIT_INPUT_BUF=""
-}
-
-action_park() {
-    (( SEL_COUNT == 0 )) && return
-    local target="${SEL_NAMES[$SELECTED]}"
-    local ttype="${SEL_TYPES[$SELECTED]}"
-    bash "$CURRENT_DIR/park-target.sh" "$target" "$ttype"
-    _LAST_STATUS_MTIME=""
 }
 
 # ─── First paint ──────────────────────────────────────────────────
@@ -1308,25 +1217,7 @@ while true; do
             return 1  # a bare Esc, with nothing following
         }
 
-        if (( WAIT_INPUT_ACTIVE )); then
-            # Wait-input mode: accept digits, Enter to confirm, Esc to cancel
-            case "$key" in
-                $'\x1b')
-                    WAIT_INPUT_ACTIVE=0; WAIT_INPUT_BUF="" ;;
-                $'\x7f'|$'\b')
-                    WAIT_INPUT_BUF="${WAIT_INPUT_BUF%?}"
-                    [[ -z "$WAIT_INPUT_BUF" ]] && { WAIT_INPUT_ACTIVE=0; WAIT_INPUT_BUF=""; } ;;
-                '')  # Enter — confirm
-                    if [[ -n "$WAIT_INPUT_BUF" ]] && [[ "$WAIT_INPUT_BUF" =~ ^[0-9]+$ ]] && (( WAIT_INPUT_BUF > 0 )); then
-                        bash "$CURRENT_DIR/wait-session-handler.sh" "$WAIT_INPUT_TARGET" "$WAIT_INPUT_BUF"
-                        NEEDS_COLLECT=1
-                        _LAST_STATUS_MTIME=""
-                    fi
-                    WAIT_INPUT_ACTIVE=0; WAIT_INPUT_BUF="" ;;
-                [0-9])
-                    WAIT_INPUT_BUF+="$key" ;;
-            esac
-        elif (( CLOSE_CONFIRM_ACTIVE )); then
+        if (( CLOSE_CONFIRM_ACTIVE )); then
             case "$key" in
                 $'\x1b'|q)
                     CLOSE_CONFIRM_ACTIVE=0
@@ -1388,8 +1279,6 @@ while true; do
                     fi
                     ;;
                 '')  action_switch ;;
-                w)   action_wait; NEEDS_COLLECT=1 ;;
-                p)   action_park; NEEDS_COLLECT=1 ;;
                 m)   "$CURRENT_DIR/sidebar-toggle-mode.sh" >/dev/null 2>&1
                      NEEDS_COLLECT=1
                      ;;

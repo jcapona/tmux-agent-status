@@ -23,7 +23,15 @@ check() {
     if [ "$2" = "$3" ]; then printf '  ok    %s\n' "$1"
     else printf '  FAIL  %s\n        expected: %s\n        actual:   %s\n' "$1" "$2" "$3"; FAILURES=$((FAILURES+1)); fi
 }
-ask() { /opt/homebrew/bin/bash -c "source '$REPO_DIR/scripts/lib/session-status.sh'; get_pane_status '$1' '$2'" 2>/dev/null; }
+# session-status.sh needs bash 4+. Hardcoding the Homebrew path meant every
+# ask() failed silently into 2>/dev/null on Linux, so all eight checks
+# compared against an empty string and the suite was red on CI for reasons
+# no Mac could reproduce.
+BASH_BIN="$(command -v bash)"
+for _c in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [ -x "$_c" ] && BASH_BIN="$_c" && break
+done
+ask() { "$BASH_BIN" -c "source '$REPO_DIR/scripts/lib/session-status.sh'; get_pane_status '$1' '$2'" 2>/dev/null; }
 
 echo "shared-state-resolution"
 

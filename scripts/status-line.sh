@@ -81,16 +81,8 @@ check_agent_processes() {
     while IFS= read -r session; do
         [ -z "$session" ] && continue
         local status_file="$STATUS_DIR/${session}.status"
-        local wait_file="$STATUS_DIR/wait/${session}.wait"
-        local parked_file="$PARKED_DIR/${session}.parked"
         local current_status=""
         local codex_pid=""
-
-        # Parking is an explicit user decision — never auto-unpark.
-        # Unparking only happens via user interaction (hook in better-hook.sh).
-        if session_is_fully_parked "$session"; then
-            continue
-        fi
 
         current_status=$(cat "$status_file" 2>/dev/null)
         if session_has_pane_status "$session"; then
@@ -108,79 +100,38 @@ check_agent_processes() {
                     "done")
                         echo "working" > "$status_file"
                         ;;
-                    "wait")
-                        rm -f "$wait_file"
-                        echo "working" > "$status_file"
-                        ;;
                 esac
             fi
         fi
     done < <(tmux list-sessions -F "#{session_name}" 2>/dev/null)
 }
 
-expire_wait_timers >/dev/null
 check_agent_processes
 
 # Count agent sessions by status
 count_agent_status() {
     local working=0
-    local waiting=0
     local done=0
     local total_agents=0
 
-    # Check all tmux sessions including SSH remote status
+    # Check all tmux sessions
     while IFS= read -r session; do
         [ -z "$session" ] && continue
 
-        if session_is_fully_parked "$session"; then
-            continue
-        fi
-
-        # Check for SSH remote status file (e.g., reachgpu-remote.status)
-        local remote_status_file="$STATUS_DIR/${session}-remote.status"
         local status_file="$STATUS_DIR/${session}.status"
 
-        # Check if we have any status for this session
-        if [ -f "$remote_status_file" ] && is_ssh_session "$session"; then
-            # SSH session with remote status
-            local status=$(cat "$remote_status_file" 2>/dev/null)
-            if [ -n "$status" ]; then
-                case "$status" in
-                    "working") ((working++)); ((total_agents++)) ;;
-                    "done") ((done++)); ((total_agents++)) ;;
-                    "wait") ((waiting++)); ((total_agents++)) ;;
-                esac
-            fi
-        elif [ -f "$remote_status_file" ] && ! is_ssh_session "$session"; then
-            # A remote cache for a non-SSH session is stale and should not override
-            # the local session status.
-            rm -f "$remote_status_file" 2>/dev/null
-            normalize_local_wait_status "$session"
-            if [ -f "$status_file" ]; then
-                local status=$(cat "$status_file" 2>/dev/null)
-                if [ -n "$status" ]; then
-                    case "$status" in
-                        "working") ((working++)); ((total_agents++)) ;;
-                        "done") ((done++)); ((total_agents++)) ;;
-                        "wait") ((waiting++)); ((total_agents++)) ;;
-                    esac
-                fi
-            fi
-        elif [ -f "$status_file" ]; then
-            # Local session status
-            normalize_local_wait_status "$session"
+        if [ -f "$status_file" ]; then
             local status=$(cat "$status_file" 2>/dev/null)
             if [ -n "$status" ]; then
                 case "$status" in
                     "working") ((working++)); ((total_agents++)) ;;
                     "done") ((done++)); ((total_agents++)) ;;
-                    "wait") ((waiting++)); ((total_agents++)) ;;
                 esac
             fi
         fi
     done < <(tmux list-sessions -F "#{session_name}" 2>/dev/null)
 
-    echo "$working:$waiting:$done:$total_agents"
+    echo "$working:$done:$total_agents"
 }
 
 # Build the per-agent "name:status" list shown in the status bar, ordered
@@ -191,17 +142,9 @@ collect_status_agents() {
     local session
     while IFS= read -r session; do
         [ -z "$session" ] && continue
-        session_is_fully_parked "$session" && continue
 
         local detected_name=""
         local emitted=0
-
-        # A session-wide wait snoozes every agent in the session.
-        local session_wait=0
-        if [ -f "$WAIT_DIR/${session}.wait" ] \
-            && [ "$(cat "$STATUS_DIR/${session}.status" 2>/dev/null)" = "wait" ]; then
-            session_wait=1
-        fi
 
         local live_panes
         live_panes=$'\n'"$(tmux list-panes -t "$session" -F '#{pane_id}' 2>/dev/null)"$'\n'
@@ -216,9 +159,8 @@ collect_status_agents() {
 
             local astatus
             astatus=$(get_pane_status "$session" "$pane_id")
-            (( session_wait )) && [ "$astatus" != "parked" ] && astatus="wait"
             case "$astatus" in
-                working|wait|done|ask) ;;
+                working|done|ask) ;;
                 *) continue ;;
             esac
 
@@ -239,7 +181,7 @@ collect_status_agents() {
         local status
         status=$(get_agent_status "$session")
         case "$status" in
-            working|wait|done|ask) ;;
+            working|done|ask) ;;
             *) continue ;;
         esac
         [ -z "$detected_name" ] && detected_name=$(find_session_agent_name "$session")
@@ -248,7 +190,7 @@ collect_status_agents() {
 }
 
 # Get current status counts (used for the done-notification diff below)
-IFS=':' read -r working waiting done total_agents <<< "$(count_agent_status)"
+IFS=':' read -r working done total_agents <<< "$(count_agent_status)"
 
 # Load previous status. Older versions stored only the working count; skip
 # notification diffing until we've written the new multi-count format once.
@@ -261,7 +203,7 @@ if [ -f "$LAST_STATUS_FILE" ]; then
 fi
 
 # Save current status counts
-echo "$working:$waiting:$done:$total_agents" > "$LAST_STATUS_FILE"
+echo "$working:$done:$total_agents" > "$LAST_STATUS_FILE"
 
 # Check if any agent just finished (done count increased)
 if [ -n "$prev_done" ] && [ "$done" -gt "$prev_done" ]; then
