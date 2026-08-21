@@ -307,7 +307,7 @@ render() {
     fi
 
     # In preview mode, session list takes left portion; preview takes right.
-    local LW=$W  # list width
+    local LW=$((W - 1))  # list width; column 0 is the state gutter
     local preview_col=0 preview_width=0
     if (( PREVIEW_MODE )); then
         LW=$(( W * 35 / 100 ))
@@ -334,6 +334,7 @@ render() {
         local sname="${rest%%|*}"; rest="${rest#*|}"
         local st="${rest%%|*}"
         local counts="${PANE_COUNTS[$sname]:-}"
+        local _icon _ic _gut
         if [[ -n "$counts" ]]; then
             IFS=: read -r _pw _pd <<< "$counts"
             ((nw += _pw)); ((nd += _pd))
@@ -385,6 +386,7 @@ render() {
 
     # ── Build render list (with search filtering) ──
     local render_lines=()
+    local _hdr_at=() _hdr_label=() _hdr_color=()
     local render_types=()
     local render_sel_indices=()
 
@@ -440,6 +442,9 @@ render() {
             render_lines+=("${color} ${label}${RST}")
             render_types+=("G")
             render_sel_indices+=("-1")
+            _hdr_at+=("$((${#render_lines[@]} - 1))")
+            _hdr_label+=("$label")
+            _hdr_color+=("$color")
             pending_group=""
             group_has_items=1
         fi
@@ -504,6 +509,32 @@ render() {
 
     SCREEN_SEL=()
 
+    # Turn each group header into a rule that spans the pane and states how many
+    # items the group holds. Counting has to happen here rather than at emit
+    # time, because a group's items are only known once the list is built.
+    local _h _hi _hend _hcount _hlabel _hcolor _hfill _hdashes
+    for (( _h = 0; _h < ${#_hdr_at[@]}; _h++ )); do
+        _hi="${_hdr_at[$_h]}"
+        _hlabel="${_hdr_label[$_h]}"
+        _hcolor="${_hdr_color[$_h]}"
+        _hend=$(( _h + 1 < ${#_hdr_at[@]} ? ${_hdr_at[$(( _h + 1 ))]:-$total_render} : total_render ))
+        _hcount=0
+        local _hj
+        for (( _hj = _hi + 1; _hj < _hend; _hj++ )); do
+            # Count only a group's top-level rows: inbox items, and sessions
+            # -- not the windows and panes nested beneath them. "SESSIONS 9"
+            # for three sessions reads as a bug.
+            case "${render_types[$_hj]}" in
+                I|S) (( _hcount++ )) ;;
+            esac
+        done
+        _hfill=$(( W - 5 - ${#_hlabel} - ${#_hcount} ))
+        (( _hfill < 0 )) && _hfill=0
+        printf -v _hdashes '%*s' "$_hfill" ''
+        _hdashes="${_hdashes// /─}"
+        render_lines[$_hi]="${DIM}──${RST}${_hcolor} ${_hlabel} ${RST}${DIM}${_hdashes} ${_hcount}${RST}"
+    done
+
     local viewport_end=$((H - 2))
     for ((i=SCROLL_OFFSET; i<total_render && line<viewport_end; i++)); do
         local rtype="${render_types[$i]}"
@@ -528,8 +559,12 @@ render() {
             case "$1" in
                 working) _ic="$YEL"; _icon="${SPINNER_FRAMES[$SPINNER_TICK]}" ;;
                 done)    _ic="$GRN"; _icon="✓" ;;
+                ask)     _ic="$MAG"; _icon="?" ;;
                 *)       _ic="$GRY"; _icon="·" ;;
             esac
+            # The gutter carries state, so it is read from the same lookup as
+            # the icon rather than being derived a second way.
+            _gut="${_ic}▐${RST}"
         }
 
         # Build compact multi-status string from pane counts "w:d"
@@ -561,13 +596,15 @@ render() {
             local icon_str icon_vlen
             local counts="${PANE_COUNTS[$name]:-}"
             local has_working_spinner=0
+            local _icon _ic _gut
             if [[ -n "$counts" ]]; then
+                _set_icon_color "$state"
                 _render_counts "$counts"
                 icon_str="$_count_str"; icon_vlen=$_count_vlen
                 IFS=: read -r _cw _cd <<< "$counts"
                 (( _cw > 0 )) && has_working_spinner=1
             else
-                local _icon _ic; _set_icon_color "$state"
+                _set_icon_color "$state"
                 icon_str="${_ic}${_icon}${RST}"; icon_vlen=1
                 [[ "$state" == "working" ]] && has_working_spinner=1
             fi
@@ -591,19 +628,19 @@ render() {
                 pad=$((LW - vlen - 4 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((3 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG} ${BOLD}▸ ${RST}${SEL_BG}${dname}${suffix}${active_tag}${SEL_BG}"
+                buf+="${_gut}${SEL_BG} ${BOLD}▸ ${RST}${SEL_BG}${dname}${suffix}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 4 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((3 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG} ${ACC_GRN}▌${RST}${CUR_BG} ${dname}${suffix}${active_tag}${CUR_BG}"
+                buf+="${_gut}${CUR_BG} ${ACC_GRN}▌${RST}${CUR_BG} ${dname}${suffix}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
             else
                 pad=$((LW - vlen - 3 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((2 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="  ${dname}${suffix}"
+                buf+="${_gut}  ${dname}${suffix}"
                 buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
             fi
 
@@ -622,13 +659,15 @@ render() {
             local icon_str icon_vlen
             local counts="${PANE_COUNTS[$name]:-}"
             local has_working_spinner=0
+            local _icon _ic _gut
             if [[ -n "$counts" ]]; then
+                _set_icon_color "$state"
                 _render_counts "$counts"
                 icon_str="$_count_str"; icon_vlen=$_count_vlen
                 IFS=: read -r _cw _cd <<< "$counts"
                 (( _cw > 0 )) && has_working_spinner=1
             else
-                local _icon _ic; _set_icon_color "$state"
+                _set_icon_color "$state"
                 icon_str="${_ic}${_icon}${RST}"; icon_vlen=1
                 [[ "$state" == "working" ]] && has_working_spinner=1
             fi
@@ -653,19 +692,19 @@ render() {
                 pad=$((LW - vlen - 8 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((7 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}   ${BOLD}▸${RST}${SEL_BG} ${DIM}${tree}${RST}${SEL_BG} ${dname}${suffix}${active_tag}${SEL_BG}"
+                buf+="${_gut}${SEL_BG}   ${BOLD}▸${RST}${SEL_BG} ${DIM}${tree}${RST}${SEL_BG} ${dname}${suffix}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 8 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((7 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}   ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${tree}${RST}${CUR_BG} ${dname}${suffix}${active_tag}${CUR_BG}"
+                buf+="${_gut}${CUR_BG}   ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${tree}${RST}${CUR_BG} ${dname}${suffix}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
             else
                 pad=$((LW - vlen - 7 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${DIM}${tree}${RST} ${dname}${suffix}"
+                buf+="${_gut}    ${DIM}${tree}${RST} ${dname}${suffix}"
                 buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
             fi
 
@@ -700,7 +739,7 @@ render() {
                 [[ -z "$pane_id" && "$sess" == "$sel_name" ]] && is_sel=1
             fi
 
-            local _icon _ic; _set_icon_color "$istatus"
+            local _icon _ic _gut; _set_icon_color "$istatus"
 
             local active_tag=""
             local tag_vlen=0
@@ -717,17 +756,17 @@ render() {
             if (( is_sel )); then
                 pad=$((LW - vlen - 5))
                 (( pad < 0 )) && pad=0
-                buf+="${SEL_BG} ${BOLD}▸ ${RST}${SEL_BG}${dlabel}${active_tag}${SEL_BG}"
+                buf+="${_gut}${SEL_BG} ${BOLD}▸ ${RST}${SEL_BG}${dlabel}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 5))
                 (( pad < 0 )) && pad=0
-                buf+="${CUR_BG} ${ACC_GRN}▌${RST}${CUR_BG} ${dlabel}${active_tag}${CUR_BG}"
+                buf+="${_gut}${CUR_BG} ${ACC_GRN}▌${RST}${CUR_BG} ${dlabel}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - 4))
                 (( pad < 0 )) && pad=0
-                buf+="  ${dlabel}"
+                buf+="${_gut}  ${dlabel}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
 
@@ -747,7 +786,7 @@ render() {
                 [[ "$sess" == "$cur_session" && "$pane_id" == "$cur_pane" ]] && is_cur=1
             fi
 
-            local _icon _ic; _set_icon_color "$pstatus"
+            local _icon _ic _gut; _set_icon_color "$pstatus"
             # The current window is marked by bracketing its index in green
             # rather than by a trailing label. The gutter is a fixed WIDX_W+2
             # columns either way -- brackets on the current row, spaces in
@@ -782,19 +821,19 @@ render() {
                 pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
+                buf+="${_gut}${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
+                buf+="${_gut}${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${wnum}${DIM}${dagent}${RST}"
+                buf+="${_gut}    ${wnum}${DIM}${dagent}${RST}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
 
@@ -808,7 +847,7 @@ render() {
             local parent_is_last="$rest"
             [[ "$sess" == "$cur_session" && "$pane_id" == "$cur_pane" ]] && is_cur=1
 
-            local _icon _ic; _set_icon_color "$pstatus"
+            local _icon _ic _gut; _set_icon_color "$pstatus"
             # Agents carry no connector and no marker -- the indent nests
             # them under their window, and the current pane is already shown by
             # the row highlight. q_gap clears the window-number gutter so it
@@ -834,19 +873,19 @@ render() {
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${q_gap}   ${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
+                buf+="${_gut}${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${q_gap}   ${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
-                buf+="${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${q_gap}   ${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
+                buf+="${_gut}${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${q_gap}   ${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
-                buf+="    ${q_gap}    ${DIM}${dagent}${RST}"
+                buf+="${_gut}    ${q_gap}    ${DIM}${dagent}${RST}"
                 buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
             fi
         fi
