@@ -381,8 +381,13 @@ render() {
     local sep="${DIM}"
     local i; for ((i=0; i<LW; i++)); do sep+="─"; done
     sep+="${RST}\033[K\n"
-    buf+="$sep"
-    ((line++))
+    # Only rule off a row that was actually drawn. Group headers are rules
+    # themselves now, so an unconditional separator stacked a bare line directly
+    # on top of "── SESSIONS ──", dividing nothing from nothing.
+    if (( CLOSE_CONFIRM_ACTIVE || SEARCH_ACTIVE || SHOW_HEADER )); then
+        buf+="$sep"
+        ((line++))
+    fi
 
     # ── Build render list (with search filtering) ──
     local render_lines=()
