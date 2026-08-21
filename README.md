@@ -25,6 +25,20 @@ Claude Code and Codex CLI are both integrated through hooks, so their states com
 
 All agent sessions can run simultaneously across tmux sessions and panes, each tracked independently.
 
+## Requirements
+
+Required:
+
+- tmux 3.2+ -- the switcher uses `display-popup`
+- Bash 4+ -- the collector uses associative arrays; macOS ships 3.2, see below
+- `fzf` -- the `prefix + S` switcher
+
+Optional, each needed only for the feature named:
+
+- `python3` -- installing agent hooks, which edits agent JSON config
+- `jq` -- multi-agent deploy only
+- `afplay` (macOS) or `paplay`/`aplay` (Linux) -- notification sounds, off by default
+
 ## Install
 
 With [TPM](https://github.com/tmux-plugins/tpm):
@@ -79,14 +93,9 @@ Integrate any AI coding tool with either of these approaches:
 
 ## Usage
 
-Default mode is sidebar-first:
-
-- Every tmux session gets a sidebar pane automatically (not under
-  `@agent-sidebar-follow`, where a single sidebar is opened once and then follows you)
-- `prefix + S` opens the hierarchical `fzf` target switcher
-- `prefix + O` toggles the sidebar in the current window (opens it, or closes it when
-  already visible). Under `@agent-sidebar-follow` it also summons the single sidebar
-  here when it is in another window
+Default mode is sidebar-first: every tmux session gets a sidebar pane
+automatically. Under `@agent-sidebar-follow` a single sidebar is opened once and
+then follows you instead.
 
 | Key | Action |
 |-----|--------|
