@@ -88,7 +88,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 require_python() {
     command -v python3 >/dev/null 2>&1 ||
-        die "python3 is required to edit $SETTINGS safely (JSON is not something to patch with sed)"
+        die "python3 is required to edit agent config files safely (JSON is not something to patch with sed)"
 }
 
 # All JSON work happens here. The file is parsed before anything is written, so
