@@ -139,8 +139,14 @@ _sample_working_screens() {
             # better estimate of when it was last really doing something.
             local _seed_file="$pane_dir/${key%%:*}_${key#*:}.status"
             if [ -f "$_seed_file" ]; then
-                _SCREEN_TS[$key]=$(stat -f %m "$_seed_file" 2>/dev/null \
-                                   || stat -c %Y "$_seed_file" 2>/dev/null || echo "$now")
+                # stat -f means "format" on macOS but "filesystem status" on GNU
+                # coreutils, where it succeeds and prints block counts -- so a ||
+                # fallback silently yields garbage. Branch on the OS instead.
+                if [[ "$(uname)" == "Darwin" ]]; then
+                    _SCREEN_TS[$key]=$(stat -f %m "$_seed_file" 2>/dev/null || echo "$now")
+                else
+                    _SCREEN_TS[$key]=$(stat -c %Y "$_seed_file" 2>/dev/null || echo "$now")
+                fi
             else
                 _SCREEN_TS[$key]="$now"
             fi

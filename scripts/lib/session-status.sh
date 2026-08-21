@@ -98,8 +98,14 @@ cached_pane_status() {
     local session="$1" pane_id="$2" now mtime line
     [ -f "$SIDEBAR_CACHE_FILE" ] || return 1
     printf -v now '%(%s)T' -1
-    mtime=$(stat -f %m "$SIDEBAR_CACHE_FILE" 2>/dev/null \
-            || stat -c %Y "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
+    # See collect.sh: stat -f is not portable; on Linux it writes garbage
+    # to stdout before failing, so a || fallback still returns it.
+    if [[ "$(uname)" == "Darwin" ]]; then
+        mtime=$(stat -f %m "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
+    else
+        mtime=$(stat -c %Y "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
+    fi
+    [ -n "$mtime" ] || return 1
     (( now - mtime > SIDEBAR_CACHE_MAX_AGE )) && return 1
     line=$(grep -m1 -F "R:Q|${session}|${pane_id}|" "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
     [ -n "$line" ] || return 1
