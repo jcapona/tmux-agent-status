@@ -13,9 +13,9 @@
 # be running. Then it samples actual CPU time (not ps %cpu, which is a lifetime
 # average) over several trials and reports the spread.
 #
-#   tests/bench.sh                                  defaults
-#   tests/bench.sh --sessions 4 --windows 5 --agents 12 --trials 3
-#   tests/bench.sh --label "before"                 tag the output
+#   tools/bench.sh                                  defaults
+#   tools/bench.sh --sessions 4 --windows 5 --agents 12 --trials 3
+#   tools/bench.sh --label "before"                 tag the output
 #
 # To compare two variants, run it on each and compare means. Anything smaller
 # than the reported spread is noise.

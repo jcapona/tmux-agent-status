@@ -60,7 +60,7 @@ placement follows from that:
 - **Keep README option comments to 2-6 lines** -- what it does, its values, and
   the one thing not obvious from the name. Rationale and measurements go in
   commit messages and here.
-- **Measure, do not assert.** Performance claims need `tests/bench.sh`.
+- **Measure, do not assert.** Performance claims need `tools/bench.sh`.
 - **Add the trap before you move on.** When something below the Traps heading
   would have saved you, it goes in this file in the same change that fixed it --
   not when someone asks. If it cost an hour, or it looked like a bug in your code
@@ -161,7 +161,7 @@ time over a window instead.
 
 **Live-server measurement is unfalsifiable here.** The number of working agents
 drives almost all the cost and changes minute to minute, so two runs of the same
-code differ by more than whatever is being evaluated. Use `tests/bench.sh`, which
+code differ by more than whatever is being evaluated. Use `tools/bench.sh`, which
 builds a fixed world on a private socket with a set number of agents pinned to
 `working`.
 
@@ -177,7 +177,7 @@ process count. Resolve by path and exclude `$$`.
 
 **Never compare a just-restarted process against a warm one.** A collector
 seconds old is still building its cache; a renderer is still doing first paint.
-`tests/bench.sh` restarts everything identically per run, which is the point of
+`tools/bench.sh` restarts everything identically per run, which is the point of
 it.
 
 **Compare against a spread, not a single number.** If the difference is smaller
