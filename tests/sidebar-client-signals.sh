@@ -3,6 +3,16 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The libs need Bash 4+; macOS /bin/bash is 3.2, so pick the same interpreter
+# the plugin's own require-bash4 guard would, rather than whatever is on PATH.
+# Invoked as `bash -c`, the guard cannot re-exec (its stack is too shallow) and
+# exits 1 instead, so this test never ran on macOS at all.
+BASH_BIN="$(command -v bash)"
+for _c in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [ -x "$_c" ] && BASH_BIN="$_c" && break
+done
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -32,7 +42,7 @@ spawn_listener() {
     local refresh_file="$1"
     local animate_file="$2"
 
-    bash -c '
+    "$BASH_BIN" -c '
         refresh_file="$1"
         animate_file="$2"
         trap "printf 1 > \"$refresh_file\"" USR1
@@ -58,7 +68,7 @@ printf '%s\n' "$inactive_pid" > "$STATUS_DIR/sidebar-clients/%2.pid"
 
 sleep 0.2
 
-PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" bash -c '
+PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" "$BASH_BIN" -c '
     source "'"$REPO_DIR"'/scripts/lib/session-status.sh"
     source "'"$REPO_DIR"'/scripts/lib/sidebar-clients.sh"
     signal_sidebar_clients USR1 all

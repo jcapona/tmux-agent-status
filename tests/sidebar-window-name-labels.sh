@@ -102,7 +102,7 @@ HOME="$TEST_HOME" \
 "$REPO_DIR/scripts/sidebar-collector.sh" --once >/dev/null
 
 CACHE_FILE="$STATUS_DIR/.sidebar-cache"
-assert_matches $'^R:P\\|repo\\|%1\\|pr24-display-mode\\|done\\|[01]\trepo:w1\tP$' "$CACHE_FILE" "single-pane windows in multi-window sessions should keep a window-scoped target"
-assert_matches $'^R:P\\|repo\\|%2\\|pr25-ask-status\\|done\\|[01]\trepo:w2\tP$' "$CACHE_FILE" "window names should remain stable labels while actions target the window scope"
+assert_matches $'^R:P\\|repo\\|w1\\|pr24-display-mode\\|done\\|[01]\trepo:w1\tP$' "$CACHE_FILE" "single-pane windows in multi-window sessions should keep a window-scoped target"
+assert_matches $'^R:P\\|repo\\|w2\\|pr25-ask-status\\|done\\|[01]\trepo:w2\tP$' "$CACHE_FILE" "window names should remain stable labels while actions target the window scope"
 
 echo "sidebar window name label regression checks passed"

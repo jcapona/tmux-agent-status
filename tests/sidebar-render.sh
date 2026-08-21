@@ -3,6 +3,16 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The libs need Bash 4+; macOS /bin/bash is 3.2, so pick the same interpreter
+# the plugin's own require-bash4 guard would, rather than whatever is on PATH.
+# Invoked as `bash -c`, the guard cannot re-exec (its stack is too shallow) and
+# exits 1 instead, so this test never ran on macOS at all.
+BASH_BIN="$(command -v bash)"
+for _c in /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    [ -x "$_c" ] && BASH_BIN="$_c" && break
+done
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -63,7 +73,7 @@ echo "wait"    > "$STATUS_DIR/waiting-task.status"
 # We need to override the main loop — extract collect() and inspect its results.
 # Instead, we source the shared lib and replicate the collect logic inline.
 
-output=$(PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" bash -c '
+output=$(PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" "$BASH_BIN" -c '
     source "'"$REPO_DIR"'/scripts/lib/session-status.sh"
 
     STATUS_DIR="'"$STATUS_DIR"'"
@@ -84,10 +94,6 @@ output=$(PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" bash -c '
             state="$agent_status"
         else
             state="noagent"
-        fi
-
-        if [ "$state" = "wait" ]; then
-            fi
         fi
 
         if [ "$state" = "done" ]; then
