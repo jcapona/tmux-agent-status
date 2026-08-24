@@ -170,6 +170,15 @@ _sample_working_screens() {
 }
 
 # ─── Main collection ──────────────────────────────────────────────
+# Mtime of everything a rebuild should react to.
+_watched_mtime() {
+    if [[ "$(uname)" == "Darwin" ]]; then
+        stat -f %m "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null
+    else
+        stat -c %Y "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null
+    fi
+}
+
 collect_data() {
 
     local SIDEBAR_MODE
@@ -179,17 +188,31 @@ collect_data() {
     SHOW_ALL_WINDOWS=$(_show_all_windows)
 
     # Quick change detection: skip full rebuild if nothing changed.
-    (( ++_COLLECT_TICK >= 10 )) && { _COLLECT_TICK=0; _LAST_STATUS_MTIME=""; }
+    #
+    # This used to force a full rebuild every tenth call, because the mtime
+    # check below only watches our own files and cannot see tmux-side changes.
+    # Most of those already arrive as hooks that touch REFRESH_FILE -- new
+    # window, split, kill, select, resize -- so the sweep existed for what has
+    # no hook, chiefly a window rename. It cost a 290ms rebuild every ten
+    # seconds to catch something that almost never happens, and was the single
+    # largest thing the collector did.
+    #
+    # A fingerprint of the tmux-side shape catches the same changes for ~3ms.
+    # A much rarer sweep stays as a backstop for anything neither notices, such
+    # as an agent process appearing with no hook and no status file.
+    (( ++_COLLECT_TICK >= 60 )) && { _COLLECT_TICK=0; _LAST_STATUS_MTIME=""; }
+    local cur_shape
+    cur_shape=$(tmux list-panes -a -F \
+        "#{session_name}:#{window_index}:#{window_name}:#{pane_id}:#{pane_current_command}" \
+        2>/dev/null | cksum 2>/dev/null)
     local cur_mtime
-    if [[ "$(uname)" == "Darwin" ]]; then
-        cur_mtime=$(stat -f %m "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null)
-    else
-        cur_mtime=$(stat -c %Y "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null)
-    fi
-    if [[ "$cur_mtime" == "$_LAST_STATUS_MTIME" ]]; then
+    cur_mtime=$(_watched_mtime)
+    if [[ "$cur_mtime" == "$_LAST_STATUS_MTIME" && "$cur_shape" == "${_LAST_SHAPE:-}" ]]; then
         _COLLECT_CHANGED=0
         return
     fi
+    _LAST_SHAPE="$cur_shape"
+    # Stamped again at the end of the rebuild -- see _finish_collect below.
     _LAST_STATUS_MTIME="$cur_mtime"
     _COLLECT_CHANGED=1
 
@@ -827,4 +850,10 @@ collect_data() {
         local vp
         for vp in "${!VISIBLE_PANES[@]}"; do printf '%s\n' "$vp"; done
     } > "$VISIBLE_FILE.tmp.$$" 2>/dev/null && mv -f "$VISIBLE_FILE.tmp.$$" "$VISIBLE_FILE" 2>/dev/null
+
+    # Publishing .visible-panes writes inside STATUS_DIR, which is one of the
+    # paths the change check stats. Re-stamp now that the rebuild has finished,
+    # or our own write makes the next tick look like a change -- and every tick
+    # after it, forever.
+    _LAST_STATUS_MTIME=$(_watched_mtime)
 }

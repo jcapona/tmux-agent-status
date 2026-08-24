@@ -73,6 +73,7 @@ SEL_TYPES=()
 SESS_START=0
 _COLLECT_TICK=0
 _LAST_STATUS_MTIME=""
+_LAST_SHAPE=""
 _COLLECT_CHANGED=0
 SUMMARY_WORKING=0
 SUMMARY_DONE=0
@@ -121,7 +122,40 @@ publish_status_summary() {
     fi
 }
 
+# Is anything actually reading what we produce?
+#
+# A registered sidebar client is a file in SIDEBAR_CLIENT_DIR, so this costs a
+# glob and no tmux IPC. The status line is the other consumer; it is off by
+# default and its option is only re-read every few seconds.
+#
+# Nothing here may drop the cache below the freshness the switcher needs.
+# cached_pane_status treats a cache older than SIDEBAR_CACHE_MAX_AGE (30s) as
+# unusable and re-derives state from raw files -- which is exactly the
+# sidebar/switcher disagreement the shared-state work removed. So with no
+# readers we slow down to IDLE_COLLECT_SECS rather than stopping.
+IDLE_COLLECT_SECS=15
+_STATUS_LINE_TS=0
+_STATUS_LINE_ON=0
+
+_readers_present() {
+    local f now
+    for f in "$SIDEBAR_CLIENT_DIR"/*.pid; do
+        [ -f "$f" ] && return 0
+        break
+    done
+    printf -v now '%(%s)T' -1
+    if (( now - _STATUS_LINE_TS >= 5 )); then
+        _STATUS_LINE_TS=$now
+        case "$(tmux show-option -gqv "@agent-status-line" 2>/dev/null)" in
+            1|on|true|yes) _STATUS_LINE_ON=1 ;;
+            *)             _STATUS_LINE_ON=0 ;;
+        esac
+    fi
+    (( _STATUS_LINE_ON ))
+}
+
 tick=0
+_last_collect=0
 while true; do
     # Liveness, once a second rather than on every 0.25s tick. This is a full
     # tmux IPC round trip -- measured at 6ms on a server with 15 sessions, so
@@ -131,11 +165,15 @@ while true; do
     if (( tick == 0 )); then
         tmux list-sessions >/dev/null 2>&1 || exit 0
 
-        collect_data
-        if (( _COLLECT_CHANGED )); then
-            serialize_cache
-            publish_status_summary
-            (( ! RUN_ONCE )) && signal_sidebar_clients USR1 all
+        printf -v _now '%(%s)T' -1
+        if _readers_present || (( _now - _last_collect >= IDLE_COLLECT_SECS )); then
+            _last_collect=$_now
+            collect_data
+            if (( _COLLECT_CHANGED )); then
+                serialize_cache
+                publish_status_summary
+                (( ! RUN_ONCE )) && signal_sidebar_clients USR1 all
+            fi
         fi
     fi
 
