@@ -134,6 +134,8 @@ publish_status_summary() {
 # sidebar/switcher disagreement the shared-state work removed. So with no
 # readers we slow down to IDLE_COLLECT_SECS rather than stopping.
 IDLE_COLLECT_SECS=15
+# Keep the cache file comfortably inside SIDEBAR_CACHE_MAX_AGE (30s).
+CACHE_REFRESH_SECS=10
 _STATUS_LINE_TS=0
 _STATUS_LINE_ON=0
 
@@ -156,6 +158,7 @@ _readers_present() {
 
 tick=0
 _last_collect=0
+_last_serialize=0
 while true; do
     # Liveness, once a second rather than on every 0.25s tick. This is a full
     # tmux IPC round trip -- measured at 6ms on a server with 15 sessions, so
@@ -169,10 +172,17 @@ while true; do
         if _readers_present || (( _now - _last_collect >= IDLE_COLLECT_SECS )); then
             _last_collect=$_now
             collect_data
-            if (( _COLLECT_CHANGED )); then
+            # The cache is rewritten on change -- but its *mtime* is the
+            # freshness signal cached_pane_status uses, and a quiet system
+            # changes nothing for minutes. The old ten-second forced rebuild
+            # kept the file warm as a side effect; without it the cache ages
+            # past SIDEBAR_CACHE_MAX_AGE and the switcher silently falls back
+            # to re-deriving state. Rewrite it well inside that ceiling.
+            if (( _COLLECT_CHANGED )) || (( _now - _last_serialize >= CACHE_REFRESH_SECS )); then
+                _last_serialize=$_now
                 serialize_cache
                 publish_status_summary
-                (( ! RUN_ONCE )) && signal_sidebar_clients USR1 all
+                (( ! RUN_ONCE )) && (( _COLLECT_CHANGED )) && signal_sidebar_clients USR1 all
             fi
         fi
     fi

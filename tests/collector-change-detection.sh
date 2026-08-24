@@ -98,6 +98,16 @@ else
     check "idle interval stays inside the switcher's freshness window" "yes" "no ($idle vs $maxage)"
 fi
 
+# Freshness is signalled by the cache file's mtime, not by whether anything
+# changed. A quiet system changes nothing for minutes, so the file has to be
+# rewritten on a timer too, or the switcher's staleness check trips.
+refresh=$(grep -oE 'CACHE_REFRESH_SECS=[0-9]+' "$REPO_DIR/scripts/sidebar-collector.sh" | head -1 | cut -d= -f2)
+if [ -n "$refresh" ] && [ -n "$maxage" ] && [ "$refresh" -lt "$maxage" ]; then
+    check "cache is rewritten inside the freshness window" "yes" "yes"
+else
+    check "cache is rewritten inside the freshness window" "yes" "no ($refresh vs $maxage)"
+fi
+
 echo
 if [ "$FAILURES" -ne 0 ]; then echo "$FAILURES check(s) failed"; exit 1; fi
 echo "all checks passed"
