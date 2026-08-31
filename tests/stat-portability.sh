@@ -11,7 +11,9 @@
 # multi-line garbage that blows up the next arithmetic expansion. This shipped twice and only CI on
 # ubuntu caught it, because a Mac can never reproduce it.
 #
-# Every stat -f must therefore sit inside a Darwin branch.
+# Every stat -f must therefore sit inside a macOS branch. The guard is spelled
+# with $OSTYPE rather than $(uname): command substitution forks a subshell even
+# for a builtin, and these sit on paths that run per render and per pane.
 
 set -euo pipefail
 
@@ -36,7 +38,7 @@ while IFS= read -r file; do
         [ -n "$lineno" ] || continue
         start=$((lineno - 3))
         [ "$start" -lt 1 ] && start=1
-        if sed -n "${start},$((lineno - 1))p" "$file" | grep -q 'Darwin'; then
+        if sed -n "${start},$((lineno - 1))p" "$file" | grep -qE 'Darwin|darwin\*'; then
             check "${file#"$REPO_DIR"/}:$lineno is inside a Darwin branch" 1
         else
             check "${file#"$REPO_DIR"/}:$lineno is inside a Darwin branch" 0
