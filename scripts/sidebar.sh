@@ -228,7 +228,7 @@ collect() {
     # Only re-parse when the cache file has been updated.
     local cache_file="$STATUS_DIR/.sidebar-cache"
     local cache_mtime
-    if [[ "$(uname)" == "Darwin" ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || echo 0)
     else
         cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || echo 0)
@@ -627,26 +627,29 @@ render() {
             (( ${#dname} > max_n )) && dname="${dname:0:$((max_n-1))}…"
 
             local vlen=$(( ${#dname} + ${#suffix} + tag_vlen ))
-            local pad
+            local pad _pad
 
             if (( is_sel )); then
                 pad=$((LW - vlen - 4 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((3 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${SEL_BG} ${BOLD}▸ ${RST}${SEL_BG}${dname}${suffix}${active_tag}${SEL_BG}"
-                buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${icon_str}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 4 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((3 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${CUR_BG} ${ACC_GRN}▌${RST}${CUR_BG} ${dname}${suffix}${active_tag}${CUR_BG}"
-                buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${icon_str}\033[K\n"
             else
                 pad=$((LW - vlen - 3 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((2 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}  ${dname}${suffix}"
-                buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${icon_str}\033[K\n"
             fi
 
         elif [[ "$rtype" == "W" ]]; then
@@ -691,26 +694,29 @@ render() {
             (( ${#dname} > max_n )) && dname="${dname:0:$((max_n-1))}…"
 
             local vlen=$(( ${#dname} + ${#suffix} + tag_vlen ))
-            local pad
+            local pad _pad
 
             if (( is_sel )); then
                 pad=$((LW - vlen - 8 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((7 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${SEL_BG}   ${BOLD}▸${RST}${SEL_BG} ${DIM}${tree}${RST}${SEL_BG} ${dname}${suffix}${active_tag}${SEL_BG}"
-                buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${icon_str}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 8 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((7 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${CUR_BG}   ${ACC_GRN}▌${RST}${CUR_BG} ${DIM}${tree}${RST}${CUR_BG} ${dname}${suffix}${active_tag}${CUR_BG}"
-                buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${icon_str}\033[K\n"
             else
                 pad=$((LW - vlen - 7 - icon_vlen))
                 (( pad < 0 )) && pad=0
                 (( has_working_spinner )) && _queue_spinner_target "$((line + 1))" "$((6 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}    ${DIM}${tree}${RST} ${dname}${suffix}"
-                buf+="$(printf '%*s' "$pad" '')${icon_str}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${icon_str}\033[K\n"
             fi
 
         elif [[ "$rtype" == "I" ]]; then
@@ -756,23 +762,26 @@ render() {
             (( ${#dlabel} > max_n )) && dlabel="${dlabel:0:$((max_n-1))}…"
 
             local vlen=$(( ${#dlabel} + tag_vlen ))
-            local pad
+            local pad _pad
 
             if (( is_sel )); then
                 pad=$((LW - vlen - 5))
                 (( pad < 0 )) && pad=0
                 buf+="${_gut}${SEL_BG} ${BOLD}▸ ${RST}${SEL_BG}${dlabel}${active_tag}${SEL_BG}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 5))
                 (( pad < 0 )) && pad=0
                 buf+="${_gut}${CUR_BG} ${ACC_GRN}▌${RST}${CUR_BG} ${dlabel}${active_tag}${CUR_BG}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - 4))
                 (( pad < 0 )) && pad=0
                 buf+="${_gut}  ${dlabel}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             fi
 
         elif [[ "$rtype" == "P" ]]; then
@@ -817,7 +826,7 @@ render() {
             (( ${#dagent} > max_n )) && dagent="${dagent:0:$((max_n-1))}…"
 
             local vlen=$(( ${#dagent} + wnum_vlen ))
-            local pad
+            local pad _pad
             local _spinner_bg="none"
             (( is_sel )) && _spinner_bg="sel"
             (( ! is_sel && is_cur )) && _spinner_bg="cur"
@@ -827,19 +836,22 @@ render() {
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${wnum}${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - 6))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((4 + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}    ${wnum}${DIM}${dagent}${RST}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             fi
 
         elif [[ "$rtype" == "Q" ]]; then
@@ -869,7 +881,7 @@ render() {
             (( ${#dagent} > max_n )) && dagent="${dagent:0:$((max_n-1))}…"
 
             local vlen=$(( ${#dagent} ))
-            local pad
+            local pad _pad
             local _spinner_bg="none"
             (( is_sel )) && _spinner_bg="sel"
             (( ! is_sel && is_cur )) && _spinner_bg="cur"
@@ -879,19 +891,22 @@ render() {
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${SEL_BG}  ${BOLD}▸${RST}${SEL_BG} ${q_gap}   ${SEL_BG} ${DIM}${dagent}${RST}${active_tag}${SEL_BG}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             elif (( is_cur )); then
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}${CUR_BG}  ${ACC_GRN}▌${RST}${CUR_BG} ${q_gap}   ${CUR_BG} ${DIM}${dagent}${RST}${active_tag}${CUR_BG}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             else
                 pad=$((LW - vlen - q_pre - 2))
                 (( pad < 0 )) && pad=0
                 [[ "$pstatus" == "working" ]] && _queue_spinner_target "$((line + 1))" "$((q_pre + vlen + pad + 1))" "$_spinner_bg"
                 buf+="${_gut}    ${q_gap}    ${DIM}${dagent}${RST}"
-                buf+="$(printf '%*s' "$pad" '')${_ic}${_icon}${RST}\033[K\n"
+                printf -v _pad '%*s' "$pad" ''
+                buf+="${_pad}${_ic}${_icon}${RST}\033[K\n"
             fi
         fi
 

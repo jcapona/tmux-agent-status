@@ -100,7 +100,7 @@ cached_pane_status() {
     printf -v now '%(%s)T' -1
     # See collect.sh: stat -f is not portable; on Linux it writes garbage
     # to stdout before failing, so a || fallback still returns it.
-    if [[ "$(uname)" == "Darwin" ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         mtime=$(stat -f %m "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1
     else
         mtime=$(stat -c %Y "$SIDEBAR_CACHE_FILE" 2>/dev/null) || return 1

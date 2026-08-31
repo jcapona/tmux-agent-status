@@ -153,7 +153,7 @@ _sample_working_screens() {
                 # stat -f means "format" on macOS but "filesystem status" on GNU
                 # coreutils, where it succeeds and prints block counts -- so a ||
                 # fallback silently yields garbage. Branch on the OS instead.
-                if [[ "$(uname)" == "Darwin" ]]; then
+                if [[ "$OSTYPE" == darwin* ]]; then
                     _SCREEN_TS[$key]=$(stat -f %m "$_seed_file" 2>/dev/null || echo "$now")
                 else
                     _SCREEN_TS[$key]=$(stat -c %Y "$_seed_file" 2>/dev/null || echo "$now")
@@ -172,7 +172,7 @@ _sample_working_screens() {
 # ─── Main collection ──────────────────────────────────────────────
 # Mtime of everything a rebuild should react to.
 _watched_mtime() {
-    if [[ "$(uname)" == "Darwin" ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then
         stat -f %m "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null
     else
         stat -c %Y "$STATUS_DIR" "$PANE_DIR" "$REFRESH_FILE" 2>/dev/null
